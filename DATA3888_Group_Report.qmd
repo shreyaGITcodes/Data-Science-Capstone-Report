@@ -1,27 +1,90 @@
 ---
 title: "DATA3888 Group Report"
-author: "52496062"
-format: html
+author: 
+  - name: "Shreya Prakash (520496062)"
+  - name: "Zoha (SID)"
+  - name: "Chenuka (SID)"
+  - name: "Enoch Wong (SID)"
+  - name: "Binh Minh Tran (SID)"
+  - name: "Ruohai (SID)"
+format:
+  html:
+    toc: true
+    toc_float: true
+    toc-depth: 1
+    code-fold: true
+    code-default: false
+    code-summary: "Show Code"
+    embed-resources: true
 editor: visual
+bibliography: references.bib
 ---
+## 1. Executive Summary 
 
-## Quarto
+-   Short description of the problem.
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+-   The main findings.
 
-## Running Code
+-   Key figure if appropriate.
 
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+-   The practical relevance of the analysis.
 
-```{r}
-1 + 1
-```
+## 2. Introduction
 
-You can add options to executable code like this
+2.1 Market importance of RV
 
-```{r}
-#| echo: false
-2 * 2
-```
+2.2 Limitations of traditional models 
 
-The `echo: false` option disables the printing of code (only output is displayed).
+2.3 Aim & contributions
+
+## 3. Data
+
+3.1 Optiver LOB dataset
+
+3.2 De-normalisation & cleaning
+
+## 4. Methodology
+
+4.1 Feature engineering
+
+4.2 Graph construction & GAT architecture
+
+4.3 Baseline models
+
+4.4 Evaluation protocol & metrics
+
+## 5. Results
+
+5.1 Overall performance
+
+5.2 Error analysis & regime split
+
+5.3 Interpretability
+
+## 6. Project Deployment & Interdisciplinary Impact
+
+6.1 Shiny app demo
+
+6.2 Real-time simulation
+
+## 7. Discussion
+
+7.1 Key findings 
+
+7.2 Limitations 
+
+7.3 Future work
+
+## 8. Conclusion
+
+## 9. Student Contribution
+
+## 10. References
+
+## 11. Appendix
+
+11.1 Code Snippets
+
+11.2 Full Metrics Table
+
+11.3 Instructions to run/ environment details
