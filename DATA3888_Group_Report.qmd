@@ -2,11 +2,11 @@
 title: "DATA3888 Group Report"
 author: 
   - name: "Shreya Prakash (520496062)"
-  - name: "Zoha (SID)"
-  - name: "Chenuka (SID)"
-  - name: "Enoch Wong (SID)"
-  - name: "Binh Minh Tran (SID)"
-  - name: "Ruohai (SID)"
+  - name: "Chenuka (530080640)"
+  - name: "Binh Minh Tran (530414672)"
+  - name: "Enoch Wong (530531430)"
+  - name: "Ruohai (540222281)"
+  - name: "Zoha (530526838)"
 format:
   html:
     toc: true
