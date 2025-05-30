@@ -19,7 +19,8 @@ format:
 editor: visual
 bibliography: references.bib
 ---
-## 1. Executive Summary 
+
+## 1. Executive Summary
 
 -   Short description of the problem.
 
@@ -39,15 +40,256 @@ bibliography: references.bib
 
 ## 3. Data
 
-3.1 Optiver LOB dataset
+3.1 Optiver LOB dataset \>\>\>\>\>
 
-3.2 De-normalisation & cleaning
+```{python}
+# list all book files and the target table
+from glob import glob
+import pandas as pd, os
+
+book_paths = sorted(glob("individual_book_train/stock_*.csv"))
+
+df_files = (pd.DataFrame({"path": book_paths})
+              .assign(stock_id=lambda d: d["path"]
+                      .str.extract(r'(\d+)').astype(int)))
+targets = pd.read_csv("Optiver_additional data/train.csv")
+print(f"{len(df_files)} stocks | {targets.time_id.nunique()} time buckets")
+```
+
+3.2 De-normalization & cleaning
+
+From our literature review we found that the kaggle discussion threads revealed that the prices were scaled by an unknown divisor D and then rounded to the nearest real market tick size (\~ \$0.01). For every `(stock_id, time_id)` we, forward fill the `600` snapshots so that every second has a quote. Compute first the differences in the price $\delta P = price_t - price_{t-1}$ and find the smallest non zero absolute jump; that equals $\frac{1 \text{tick}}{D}$ then multiply the whole bucket by $\frac{0.01}{\text{min}(|\delta P_{norm}|)}$. We get the real prices by doing $P^{\text{real}}_t = D \times P^{\text{norm}}_t$
+
+```{python}
+def denorm_scale(grp, col="ask_price1"):
+    grp = (grp.set_index("seconds_in_bucket")
+              .reindex(range(600), method="ffill")
+              .reset_index())
+    tick = grp[col].diff().abs().loc[lambda x: x>0].min()
+    return (grp[col] * (0.01 / tick)).mean()       # bucket opening price
+
+prices = []
+for _, row in df_files.iterrows():
+    df = pd.read_csv(row.path, usecols=["time_id", "seconds_in_bucket", "ask_price1"])
+    s  = df.groupby("time_id").apply(denorm_scale, include_groups=False).rename(row.stock_id)
+    prices.append(s)
+
+df_prices = pd.concat(prices, axis=1)   # rows: time_id, cols: stock_id
+```
+
+The resulting `3830 x 120` matrix is our master price panel. A quick histogram of $\delta P$ by `tick` show exactly integers only which confirms to us the re-scaling recovered genuine tick units.
+
+### 3.2.2 Handling the gaps and extreme quotes
+
+Similar to earlier we used forward / backward to impute the remaining holes with the last known quotes; this preserves the micros structure dynamics without fabricating new trends and loosing generality of our method. We exclude a stock if more than 0.05 % of its 1-second snapshots are missing on any trading day (≈ 44 of 88 200). This ceiling keeps the expected gap below 1 s in a 10-minute bucket, ensuring forward-fill imputation cannot materially flatten high-frequency dynamics. To prevent single tick glitches we from exploding volatility estimates we winsorise each stocks price at the 0.1 % and 99.9% of the quantiles.
+
+```{python}
+# remove excessively sparse columns
+THRESHOLD = 0.0005
+keep = df_prices.isna().mean().le(0.0005)
+df_prices = df_prices.loc[:, keep]
+
+# winsorise
+q_lo, q_hi = df_prices.quantile(0.001), df_prices.quantile(0.999)
+df_prices_denorm_clean = df_prices.clip(lower=q_lo, upper=q_hi, axis=1).ffill().bfill()
+df_prices_denorm_clean
+```
+
+This now underpins all subsequent features. To finally recover the chronological order of the `time_ids` to improve the per bucket RV prediction we embedded each bucket in a 1-D spectral manifold and sort by the leading eigen-coordinate. Because prices evolve almost monotonically intra-day, the leading spectral component monotonises the shuffled ids, effectively restoring the hidden chronology. We validate the approach by applying the same embedding to daily closing prices of the S&P-100 (right panel in Figure 1); the recovered order aligns perfectly with calendar dates, confirming the method’s fidelity.
+
+```{python}
+from sklearn.manifold import SpectralEmbedding
+from sklearn.preprocessing import minmax_scale
+import yfinance as yf
+
+def spectral_order(df, k=30, seed=42):
+    """
+    Return index sorted by the leading spectral coordinate.
+    df : (n_buckets × n_stocks) price matrix with *no* NaNs.
+    """
+    X = minmax_scale(df.values)                                         # 1 normalise
+    coord = (SpectralEmbedding(n_components=1,
+                               n_neighbors=min(k, len(df)-1),
+                               random_state=seed)
+             .fit_transform(X).ravel())                                 # 2 embed
+    return df.index[coord.argsort()]                                    # 3 sort
+
+time_id_ordered = spectral_order(df_prices_denorm_clean)
+
+import yfinance as yf, pandas as pd, numpy as np, matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+
+# Download daily S&P-100 closes for a visual benchmark
+sp100 = pd.read_html("https://en.wikipedia.org/wiki/S%26P_100")[2].Symbol
+df_real = (yf.download(sp100.to_list(), start="2020-01-01", end="2021-06-01",
+                       interval="1d")['Close']
+             .dropna(axis=1, thresh=0.5*len(sp100))
+             .dropna())                              
+
+# embed both matrices in 2-D for eyeballing
+embed = SpectralEmbedding(n_components=2, random_state=42)
+Z_denorm = embed.fit_transform(minmax_scale(df_prices_denorm_clean.values))
+Z_real   = embed.fit_transform(minmax_scale(df_real.values))
+
+# Plot: colour = recovered order (Optiver)  vs calendar date (S&P)
+fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+sc0 = ax[0].scatter(Z_denorm[:, 0], Z_denorm[:, 1],
+                    c=np.arange(len(Z_denorm)), cmap='viridis', s=8)
+ax[0].set_title("Optiver buckets – colour = spectral order")
+fig.colorbar(sc0, ax=ax[0], shrink=0.7)
+sc1 = ax[1].scatter(Z_real[:, 0], Z_real[:, 1],
+                    c=mdates.date2num(df_real.index), cmap='viridis', s=8)
+ax[1].set_title("S&P-100 daily – colour = calendar date")
+fig.colorbar(sc1, ax=ax[1], shrink=0.7)
+fig.tight_layout()
+plt.show()
+```
+
+#### 3.2.3 Assesing Characteristics and trends
+One of the main concern about time series data is on non-stationarity. While test like Augmented Dickey-Fuller exists to test the statistical significance of this it fails in 
 
 ## 4. Methodology
 
 4.1 Feature engineering
 
-4.2 Graph construction & GAT architecture
+### 4.2 Graph construction & GAT architecture
+
+In this section we describe how we turned the above denormaised price matrix into a static stock stock-neighbour graph, assemble node-level features and the apply a two layer Graph Attention Network for bucket‐by‐bucket volatility forecasting.
+
+#### 4.2.1 Building the neighbour graph and GAT
+
+After the pruning and aligning of the stocks with the threshold dropp rate of 0.01% on missing buckets, for each stock we processed to analyse the neighbours by a T length price trajectory. Each stock is a point in $\mathbb{R}^T$. We Min-Max scale and query a KD-tree.
+
+```{python}
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.neighbors    import KDTree
+import torch
+import numpy as np
+
+K = 3  # number of neighbours per node
+
+# Stack as (N stocks × T buckets)
+X_price = MinMaxScaler().fit_transform(df_clean.T.values)
+
+tree      = KDTree(X_price, metric='euclidean')
+dist, nbr = tree.query(X_price, k=K+1)    # includes self at index 0
+
+# Build edge index & weights (exclude self‐loops)
+src = np.repeat(np.arange(X_price.shape[0]), K)
+dst = nbr[:, 1:].ravel()
+edge_index  = torch.tensor([src, dst], dtype=torch.long)
+edge_weight = torch.exp(-torch.tensor(dist[:,1:].ravel(), dtype=torch.float))
+
+```
+
+For each bucket $t$ and stock $i$ we then build node level features which include Own-RV lags (lags 1, 2, 3), Mean neighbour RV and other order‐book micro-features (Reffer to appendix for details and code).
+
+```{python}
+import numpy as np
+
+# 1. Pivot realised-vol panel: RV[t, i]
+rv_panel = rv_df.pivot(index='bucket_idx', columns='stock_id', values='rv').values  # shape T×N
+T, N     = rv_panel.shape
+
+# 2. Own‐RV lags → (T × N × 3)
+lags       = [1, 2, 3]
+own_feats  = np.stack([np.roll(rv_panel, lag, axis=0) for lag in lags], axis=2)
+own_feats[:max(lags), :, :] = np.nan  # invalid for first max(lags) rows
+
+# 3. Neighbour‐mean RV → (T × N × 1)
+nei_mean = np.zeros((T, N, 1))
+for i in range(N):
+    nei_idx = nbr[i, 1:]               # neighbour indices for stock i
+    nei_mean[:, i, 0] = rv_panel[:, nei_idx].mean(axis=1)
+
+# 4. Concatenate and median‐impute any NaNs
+X = np.concatenate([own_feats, nei_mean], axis=2)  # shape T×N×4
+nan_med = np.nanmedian(X)
+X[np.isnan(X)] = nan_med
+
+# 5. Convert to torch tensor
+X_tensor = torch.tensor(X, dtype=torch.float)      # T × N × F
+y_tensor = torch.tensor(rv_panel, dtype=torch.float) # T × N
+```
+
+Then to learn the dynamic weightninigs of the neighbiurse we deine a simple 2-layer GAT that lets each stock fuse its own history with weighted neighbour signals.
+
+```{python}
+import torch
+import torch.nn.functional as F
+from torch_geometric.nn import GATConv
+
+class VolatilityGAT(torch.nn.Module):
+    def __init__(self, in_feats, hidden=128, heads=8):
+        super().__init__()
+        self.conv1 = GATConv(in_feats, hidden, heads=heads, dropout=0.1)
+        self.conv2 = GATConv(hidden*heads, 1,   heads=1,     concat=False, dropout=0.1)
+
+    def forward(self, x, edge_index, edge_weight=None):
+        # x: [N, F]; returns [N, 1]
+        h = self.conv1(x, edge_index, edge_weight=edge_weight)
+        h = F.elu(h)
+        h = self.conv2(h, edge_index, edge_weight=edge_weight)
+        return h.squeeze(-1)
+```
+
+#### 4.2.2 Training, Loss and Cross Validation
+
+We train on the Root Mean Squared Percentage Error (RMSPE), defined per bucket $t$ as guided by Optiver in the Kaggle competition for the loss function (Refer Appendix for details) as it focuses on the models relative errors, unlike aboslute error which understate risk. In our version in order to prevent division by zero issues we add a small $\epsilon = 10^-8$.
+
+```{python}
+def rmspe_loss(y_pred, y_true, eps=1e-8):
+   return torch.sqrt(torch.mean(((y_pred - y_true)/(y_true + eps))**2))
+```
+
+Despite the chronological splits advantages we wanted to make sure the model wont get a lucky/unlucky with market regime in validation period. There were unique chalenges the model faces beyond the regime shifts including Attention mechanism stability across different market conditions, Graph topology effectiveness (from KD-tree neighbors) to name a few and to elimate all these as much as possible we went with a 8 fold cross validation with early stopping to prevent overffitting on a single time period and to find the best GAT architecture (hidden dims, heads, dropout) without contaminating your final test set.
+
+```{python}
+tscv = TimeSeriesSplit(
+    n_splits=4,
+    test_size = int(0.1 * len(train_val_list)),
+    gap       = 0,
+)
+
+for fold, (tr_idx, va_idx) in enumerate(tscv.split(train_val_list)):
+    print(f"\n=== Fold {fold+1} / {tscv.n_splits} ===")
+    train_graphs = [train_val_list[i] for i in tr_idx]
+    valid_graphs = [train_val_list[i] for i in va_idx]
+
+    loader_tr = DataLoader(train_graphs, batch_size=1, shuffle=True)
+    loader_va = DataLoader(valid_graphs, batch_size=1)
+
+    # re-init model & optimiser for this fold
+    model     = GATNet(in_dim=F).to(device)
+    optim     = torch.optim.Adam(model.parameters(), lr=5e-4, weight_decay=1e-5)
+    best_val, patience, pat_ticks = 1e9, 10, 0
+
+    # training + early-stop
+    for epoch in range(200):
+        model.train()
+        for g in loader_tr:
+            g = g.to(device)
+            optim.zero_grad()
+            ŷ = model(g)
+            loss = rmspe_loss(ŷ, g.y)
+            loss.backward(); optim.step()
+
+        # validation
+        model.eval()
+        with torch.no_grad():
+            val_loss = np.mean([rmspe_loss(model(g.to(device)), g.y.to(device)).item() for g in loader_va ])
+        print(f'  Epoch {epoch:03d}  |  val RMSPE = {val_loss:.4f}')
+
+        # early-stop logic
+        if val_loss < best_val - 1e-4:
+            best_val, pat_ticks = val_loss, 0
+            torch.save(model.state_dict(), f'best_gat_fold{fold}.pt')
+        else:
+            pat_ticks += 1
+            if pat_ticks >= patience:
+                print("  → early stopping")
+                break
+```
 
 4.3 Baseline models
 
