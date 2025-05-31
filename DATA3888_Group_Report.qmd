@@ -386,7 +386,74 @@ for stock in real_volatility.columns:
 
 ### Random Forest
 ``` {python}
+#| eval: false
+#| echo: false
+rf_panel = pd.DataFrame()
+QLIKE_list = []
+RMSE_list = []
+RMPSE_list = []
+MAPE_list = []
+# Dictionary to store best n_estimators for each stock
+best_estimators_dict = {}
 
+n_estimators = [200, 300, 500]
+
+for stock in real_volatility.columns:  
+    stock_series = real_volatility[stock]
+    log_stock = np.log(stock_series)
+
+    rf_data = pd.DataFrame({
+        'volatility': log_stock,
+        'trend': np.arange(len(log_stock)),
+        'lag1': log_stock.shift(1),
+        'lag2': log_stock.shift(2),
+        'lag3': log_stock.shift(3),
+        'moving_avg_3': log_stock.rolling(window=3).mean().shift(1),
+        'moving_avg_5': log_stock.rolling(window=5).mean().shift(1),
+        'moving_avg_10': log_stock.rolling(window=10).mean().shift(1),
+        'std_5': log_stock.rolling(window=5).std().shift(1),
+        'std_10': log_stock.rolling(window=10).std().shift(1),
+        'max_5': log_stock.rolling(window=5).max().shift(1),
+        'min_5': log_stock.rolling(window=5).min().shift(1)})
+
+    rf_data = rf_data.dropna()
+
+    number = len(rf_data)
+    train_size = int(number * 0.8)
+    validation_size = int(number * 0.1)
+
+    rf_train = rf_data.iloc[:train_size]
+    rf_validation = rf_data.iloc[train_size:train_size + validation_size]
+    rf_test = rf_data.iloc[train_size + validation_size:]
+
+    feature_columns = ['trend', 'lag1', 'lag2', 'lag3', 'moving_avg_3', 'moving_avg_5', 'moving_avg_10', 'std_5', 'std_10', 'max_5', 'min_5']
+    
+    train_X = rf_train[feature_columns]
+    train_y = rf_train['volatility']
+    validation_X = rf_validation[feature_columns]
+    validation_y = rf_validation['volatility']
+    test_X = rf_test[feature_columns]
+    test_y = rf_test['volatility']
+
+    final_MAPE = float('inf')
+    final_Prediction = None
+    final_Actual = None
+    best_n = None  # Track best n_estimators
+
+    for n in n_estimators:
+        rf_model = RandomForestRegressor(n_estimators=n, random_state=42, max_depth=10)
+        rf_model.fit(train_X, train_y)
+        validation_Prediction = np.exp(rf_model.predict(validation_X))
+        validation_Actual = np.exp(validation_y)
+        validation_RMSE, validation_QLIKE, validation_RMPSE, validation_MAPE = metric(validation_Actual, validation_Prediction)
+
+        if validation_MAPE < final_MAPE:
+            final_MAPE = validation_MAPE
+            final_Prediction = np.exp(rf_model.predict(test_X))
+            final_Actual = np.exp(test_y)
+            best_n = n  # Store best n_estimators
+
+    rf_panel[stock] = pd.Series(final_Prediction, index=rf_test.index)
 
 ```
 - Built multiple decision trees and averaged the result
@@ -399,8 +466,74 @@ for stock in real_volatility.columns:
 
 ### Gradient Boosting
 ``` {python}
+#| eval: false
+#| echo: false
+gb_panel = pd.DataFrame()
+QLIKE_list = []
+RMSE_list = []
+RMPSE_list = []
+MAPE_list = []
+# Dictionary to store best learning rate for each stock
+best_lr_dict = {}
 
+learning_rate = [0.01, 0.05, 0.1]
 
+for stock in real_volatility.columns:  
+    stock_series = real_volatility[stock]
+    log_stock = np.log(stock_series)
+
+    gb_data = pd.DataFrame({
+        'volatility': log_stock,
+        'trend': np.arange(len(log_stock)),
+        'lag1': log_stock.shift(1),
+        'lag2': log_stock.shift(2),
+        'lag3': log_stock.shift(3),
+        'moving_avg_3': log_stock.rolling(window=3).mean().shift(1),
+        'moving_avg_5': log_stock.rolling(window=5).mean().shift(1),
+        'moving_avg_10': log_stock.rolling(window=10).mean().shift(1),
+        'std_5': log_stock.rolling(window=5).std().shift(1),
+        'std_10': log_stock.rolling(window=10).std().shift(1),
+        'max_5': log_stock.rolling(window=5).max().shift(1),
+        'min_5': log_stock.rolling(window=5).min().shift(1)})
+
+    gb_data = gb_data.dropna()
+
+    number = len(gb_data)
+    train_size = int(number * 0.8)
+    validation_size = int(number * 0.1)
+
+    gb_train = gb_data.iloc[:train_size]
+    gb_validation = gb_data.iloc[train_size:train_size + validation_size]
+    gb_test = gb_data.iloc[train_size + validation_size:]
+
+    feature_columns = ['trend', 'lag1', 'lag2', 'lag3', 'moving_avg_3', 'moving_avg_5', 'moving_avg_10', 'std_5', 'std_10', 'max_5', 'min_5']
+    
+    train_X = gb_train[feature_columns]
+    train_y = gb_train['volatility']
+    validation_X = gb_validation[feature_columns]
+    validation_y = gb_validation['volatility']
+    test_X = gb_test[feature_columns]
+    test_y = gb_test['volatility']
+
+    final_MAPE = float('inf')
+    final_Prediction = None
+    final_Actual = None
+    best_lr = None  # Track best learning rate
+
+    for learning in learning_rate:
+        gb_model = GradientBoostingRegressor(n_estimators=500, learning_rate=learning, max_depth=6, random_state=42)
+        gb_model.fit(train_X, train_y)
+        validation_Prediction = np.exp(gb_model.predict(validation_X))
+        validation_Actual = np.exp(validation_y)
+        validation_RMSE, validation_QLIKE, validation_RMPSE, validation_MAPE = metric(validation_Actual, validation_Prediction)
+
+        if validation_MAPE < final_MAPE:
+            final_MAPE = validation_MAPE
+            final_Prediction = np.exp(gb_model.predict(test_X))
+            final_Actual = np.exp(test_y)
+            best_lr = learning  # Store best learning rate
+
+    gb_panel[stock] = pd.Series(final_Prediction, index=gb_test.index)
 ```
 - Built multiple trees
 - Each new tree would correct the error of the previous tree
@@ -542,7 +675,7 @@ $$
 - Measure the average difference between prediction and actual values in percentage format
 - It is easy to interpret and it is scale-independent
 $$
-\text{MAPE} = \frac{100\%}{n} \sum_{t=1}^n \left| \frac{y_t - \hat{y}_t}{y_t} \right|
+\text{MAPE} = \frac{1}{n} \sum_{t=1}^n \left| \frac{y_t - \hat{y}_t}{y_t} \right|
 $$
 ## Data-Splitting 
 

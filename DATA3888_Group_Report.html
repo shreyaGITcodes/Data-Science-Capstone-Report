@@ -3270,7 +3270,7 @@ window.Quarto = {
 </header>
 
 
-<div id="11c8fbef" class="cell" data-execution_count="1">
+<div id="d8212c96" class="cell" data-execution_count="1">
 <details class="code-fold">
 <summary>Show Code</summary>
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
@@ -3311,7 +3311,7 @@ window.Quarto = {
 </section>
 <section id="data" class="level2">
 <h2 class="anchored" data-anchor-id="data">3. Data</h2>
-<div id="7d459f5d" class="cell" data-execution_count="2">
+<div id="73ae3d7b" class="cell" data-execution_count="2">
 <details class="code-fold">
 <summary>Show Code</summary>
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
@@ -3328,7 +3328,7 @@ window.Quarto = {
 <p>4.2 Graph construction &amp; GAT architecture</p>
 <p>4.3 Baseline models</p>
 <p>To benchmark the performance of the GAT model, diverse baseline models were used including both traditional models and machine learning approaches. Log transformation of volatility was used across all baseline models to stabilise variance and improve model interpretability. These baseline models were served to evaluate whether GAT could capture patterns better than other models.</p>
-<div id="dc3c56e6" class="cell" data-execution_count="3">
+<div id="35a9cfcf" class="cell" data-execution_count="3">
 <details class="code-fold">
 <summary>Show Code</summary>
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define evaluation metrics functions</span></span>
@@ -3346,7 +3346,7 @@ window.Quarto = {
 </div>
 <section id="har-rv" class="level3">
 <h3 class="anchored" data-anchor-id="har-rv">HAR-RV</h3>
-<div id="9b56178c" class="cell" data-execution_count="4">
+<div id="eddf12ef" class="cell" data-execution_count="4">
 <details class="code-fold">
 <summary>Show Code</summary>
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># lists to store result</span></span>
@@ -3451,7 +3451,7 @@ window.Quarto = {
 </section>
 <section id="lag-model" class="level3">
 <h3 class="anchored" data-anchor-id="lag-model">Lag-Model</h3>
-<div id="600e5f73" class="cell" data-execution_count="5">
+<div id="a3560a0e" class="cell" data-execution_count="5">
 <details class="code-fold">
 <summary>Show Code</summary>
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># lists to store the value</span></span>
@@ -3541,7 +3541,7 @@ window.Quarto = {
 </section>
 <section id="pca-model" class="level3">
 <h3 class="anchored" data-anchor-id="pca-model">PCA Model</h3>
-<div id="a3a86255" class="cell" data-execution_count="6">
+<div id="0d6083c6" class="cell" data-execution_count="6">
 <details class="code-fold">
 <summary>Show Code</summary>
 <div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># List to store value</span></span>
@@ -3666,7 +3666,7 @@ window.Quarto = {
 </section>
 <section id="linear-regression" class="level3">
 <h3 class="anchored" data-anchor-id="linear-regression">Linear Regression</h3>
-<div id="d68beeef" class="cell" data-execution_count="7">
+<div id="41d956f8" class="cell" data-execution_count="9">
 <details class="code-fold">
 <summary>Show Code</summary>
 <div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># List to store value</span></span>
@@ -3754,7 +3754,7 @@ window.Quarto = {
 </section>
 <section id="for-now-random-forest-and-gradient-boosting-have-been-taken-out-must-include-it" class="level1">
 <h1>FOR NOW RANDOM FOREST AND GRADIENT BOOSTING HAVE BEEN TAKEN OUT, MUST INCLUDE IT</h1>
-<div id="fdf2dbab" class="cell" data-execution_count="8">
+<div id="91506998" class="cell" data-execution_count="10">
 <details class="code-fold">
 <summary>Show Code</summary>
 <div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
@@ -3805,7 +3805,7 @@ window.Quarto = {
 <ul>
 <li>Measure the average difference between prediction and actual values in percentage format</li>
 <li>It is easy to interpret and it is scale-independent <span class="math display">\[
-\text{MAPE} = \frac{100\%}{n} \sum_{t=1}^n \left| \frac{y_t - \hat{y}_t}{y_t} \right|
+\text{MAPE} = \frac{1}{n} \sum_{t=1}^n \left| \frac{y_t - \hat{y}_t}{y_t} \right|
 \]</span> ## Data-Splitting</li>
 </ul>
 <p>For each individual stock, it would split the dataset into 80% training, 10% validation and 10% testing. The training set was used to fit the model. The validation set was used for hyperparameters tuning while the test set was used to evaluate the final performance. This walk-forward split ensures that the future information would not leak into the past, maintaining data integrity.</p>
@@ -3813,7 +3813,7 @@ window.Quarto = {
 <section id="results" class="level2">
 <h2 class="anchored" data-anchor-id="results">5. Results</h2>
 <p>5.1 Overall performance</p>
-<div class="cell" data-tbl-align="center" data-execution_count="9">
+<div class="cell" data-tbl-align="center" data-execution_count="11">
 <details class="code-fold">
 <summary>Show Code</summary>
 <div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define model names</span></span>
@@ -3868,13 +3868,13 @@ window.Quarto = {
 <span id="cb9-50"><a href="#cb9-50" aria-hidden="true" tabindex="-1"></a><span class="co"># Run the code</span></span>
 <span id="cb9-51"><a href="#cb9-51" aria-hidden="true" tabindex="-1"></a>calculate_performance_metrics()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<div id="tbl-performance" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="9" data-tbl-align="center">
+<div id="tbl-performance" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-tbl-align="center" data-execution_count="11">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-performance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Table 1: Performance metrics across all stocks for each model.
 </figcaption>
 <div aria-describedby="tbl-performance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<div class="cell-output cell-output-display" data-execution_count="20">
+<div class="cell-output cell-output-display" data-execution_count="9">
 <div>
 
 
@@ -3960,7 +3960,7 @@ Table 1: Performance metrics across all stocks for each model.
 <p>Machine learning models show mixed results: Random_Forest has reasonable accuracy but higher relative errors (RMSPE: 1.50, MAPE: 1.21), while Gradient_Boosting underperforms significantly (RMSPE: 2.48, MAPE: 2.00).</p>
 <p>The results show GAT’s effectiveness in capturing complex volatility patterns, while traditional models remain competitive despite simpler structures.</p>
 <p>5.2 Error analysis &amp; regime split</p>
-<div id="cell-fig-model-comparison" class="cell" data-execution_count="10">
+<div id="cell-fig-model-comparison" class="cell" data-execution_count="12">
 <details class="code-fold">
 <summary>Show Code</summary>
 <div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>model_names <span class="op">=</span> [<span class="st">&#39;HAR_RV&#39;</span>, <span class="st">&#39;LAG&#39;</span>, <span class="st">&#39;Linear&#39;</span>, <span class="st">&#39;PCA_Linear&#39;</span>, <span class="st">&#39;Random_Forest&#39;</span>, <span class="st">&#39;Gradient_Boosting&#39;</span>, <span class="st">&#39;GAT&#39;</span>]</span>
@@ -4073,7 +4073,7 @@ Figure 1: Predicted vs Actual Volatility for Different Models
 <p>In low-volatility periods, the majority of baseline models are able to capture the pattern with minimal error. However during high volatility periods, simple models like the Lag model fail to adjust quickly and result in larger error.</p>
 <p>Moreover, HAR-RV performs better as it can adjust quickly across different regimes. This suggested that the model’s structure is better in responding to changing conditions. In contrast, RF and GB struggled with adjusting which indicates that further hyperparameters tuning and feature adjustments are required to improve the model’s adaptability in changing market conditions.</p>
 <p>5.3 Interpretability</p>
-<div id="cell-fig-correlation" class="cell" data-execution_count="11">
+<div id="cell-fig-correlation" class="cell" data-execution_count="13">
 <details class="code-fold">
 <summary>Show Code</summary>
 <div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>desktop_path <span class="op">=</span> Path(<span class="st">&#39;.&#39;</span>)</span>
