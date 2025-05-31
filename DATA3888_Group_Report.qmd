@@ -18,6 +18,7 @@ format:
     embed-resources: true
 editor: visual
 bibliography: references.bib
+execute.python.virtualenv: ".venv"
 ---
 
 ## 1. Executive Summary
@@ -58,7 +59,7 @@ print(f"{len(df_files)} stocks | {targets.time_id.nunique()} time buckets")
 
 3.2 De-normalization & cleaning
 
-From our literature review we found that the kaggle discussion threads revealed that the prices were scaled by an unknown divisor D and then rounded to the nearest real market tick size (\~ \$0.01). For every `(stock_id, time_id)` we, forward fill the `600` snapshots so that every second has a quote. Compute first the differences in the price $\delta P = price_t - price_{t-1}$ and find the smallest non zero absolute jump; that equals $\frac{1 \text{tick}}{D}$ then multiply the whole bucket by $\frac{0.01}{\text{min}(|\delta P_{norm}|)}$. We get the real prices by doing $P^{\text{real}}_t = D \times P^{\text{norm}}_t$
+From our literature review we found that the kaggle discussion threads revealed that the prices were scaled by an unknown divisor D and then rounded to the nearest real market tick size (\~ \$0.01). For every `(stock_id, time_id)` we, forward fill the `600` snapshots so that every second has a quote. Compute first the differences in the price $\delta P = price_t - price_{t-1}$ and find the smallest non zero absolute jump; that equals $\frac{1 \text{tick}}{D}$ then multiply the whole bucket by $\frac{0.01}{\text{min}(|\delta P_{norm}|)}$. We get the real prices by doing $P^{\text{real}}_t = D \times P^{\text{norm}}_t$. See below Appendix for more detail.
 
 ```{python}
 def denorm_scale(grp, col="ask_price1"):
@@ -81,10 +82,9 @@ The resulting `3830 x 120` matrix is our master price panel. A quick histogram o
 
 ### 3.2.2 Handling the gaps and extreme quotes
 
-Similar to earlier we used forward / backward to impute the remaining holes with the last known quotes; this preserves the micros structure dynamics without fabricating new trends and loosing generality of our method. We exclude a stock if more than 0.05 % of its 1-second snapshots are missing on any trading day (≈ 44 of 88 200). This ceiling keeps the expected gap below 1 s in a 10-minute bucket, ensuring forward-fill imputation cannot materially flatten high-frequency dynamics. To prevent single tick glitches we from exploding volatility estimates we winsorise each stocks price at the 0.1 % and 99.9% of the quantiles.
+Similar to earlier we used forward / backward to impute the remaining holes with the last known quotes; this preserves the micros structure dynamics without fabricating new trends and loosing generality of our method. We exclude a stock if more than 0.05 % of its 1-second snapshots are missing on any trading day (≈ 44 of 88 200). This ceiling keeps the expected gap below 1 s in a 10-minute bucket, ensuring forward-fill imputation cannot materially flatten high-frequency dynamics. To prevent single tick glitches we from exploding volatility estimates we Winsorize each stocks price at the 0.1 % and 99.9% of the quantiles.
 
 ```{python}
-# remove excessively sparse columns
 from sklearn.manifold import SpectralEmbedding
 from sklearn.preprocessing import minmax_scale
 import yfinance as yf
@@ -94,14 +94,12 @@ def spectral_order(df, k=30, seed=42):
     Return index sorted by the leading spectral coordinate.
     df : (n_buckets × n_stocks) price matrix with *no* NaNs.
     """
-    X = minmax_scale(df.values)                                         # 1 normalise
-    coord = (SpectralEmbedding(n_components=1,
-                               n_neighbors=min(k, len(df)-1),
-                               random_state=seed)
-             .fit_transform(X).ravel())                                 # 2 embed
-    return df.index[coord.argsort()]                                    # 3 sort
-
-time_id_ordered = spectral_order(df_prices_denorm_clean)
+    df_clean = df.fillna(df.mean())
+    X = minmax_scale(df_clean.values) # normalise
+  
+    emb_2d = SpectralEmbedding(random_state=seed).fit_transform(X)
+    coord = emb_2d[:, 0]
+    return df.index[coord.argsort()]
 
 THRESHOLD = 0.0005
 keep = df_prices.isna().mean().le(0.0005)
@@ -110,6 +108,7 @@ df_prices = df_prices.loc[:, keep]
 # winsorise
 q_lo, q_hi = df_prices.quantile(0.001), df_prices.quantile(0.999)
 df_prices_denorm_clean = df_prices.clip(lower=q_lo, upper=q_hi, axis=1).ffill().bfill()
+time_id_ordered = spectral_order(df_prices_denorm_clean)
 df_prices_ordered = df_prices_denorm_clean.reindex(time_id_ordered)
 ```
 
@@ -151,33 +150,27 @@ plt.show()
 
 #### 3.2.3 Assesing Characteristics and trends
 
-After recovering the chornology of the time_ids, for each stock we calcualted their RV across this time_id trend and then calculated the average RV per time_id from all the stocks, plotting a Averaged RV against time_id. Below is the trend of the data we observed.
+After recovering the chronology of the time_ids, for each stock we calculated their RV across the time_id trend and then calculated the average RV per time_id from all the stocks, plotting a Averaged RV against time_id formally \$ \text{avg_RV}*t ;=;*\frac1N\sum{i=1}\^N \mathrm{RV}\_{t,i}\$. Below is the trend of the data we observed.
 
 ```{python}
 def compute_rv(grp):
     """Compute realized volatility from intraday price data"""
-    # Calculate WAP (Weighted Average Price) if bid/ask data available
     if all(col in grp.columns for col in ['bid_price1', 'ask_price1', 'bid_size1', 'ask_size1']):
         wap = (grp['bid_price1'] * grp['ask_size1'] + 
                grp['ask_price1'] * grp['bid_size1']) / \
               (grp['bid_size1'] + grp['ask_size1'])
     else:
-        # Fallback to ask_price1 if WAP components not available
         wap = grp['ask_price1']
-    
-    # Calculate log returns and realized volatility
+        
     log_returns = np.log(wap).diff().dropna()
     rv = np.sqrt((log_returns ** 2).sum())
     return rv
 
-# Calculate RV for each stock and time_id combination
+# RV for each stock and time_id combination
 rv_records = []
 for _, row in df_files.iterrows():
     try:
-        # Load the individual book file
         dfb = pd.read_csv(row.path)
-        
-        # Calculate RV for each time_id in this stock
         rv_series = (dfb.groupby('time_id')
                        .apply(compute_rv, include_groups=False)
                        .rename('rv')
@@ -188,23 +181,15 @@ for _, row in df_files.iterrows():
         print(f"Error processing {row.path}: {e}")
         continue
 
-# Combine all RV calculations
 rv_df = pd.concat(rv_records, ignore_index=True)
 
-# Map to bucket_idx using time ordering
+# map to bucket_idx using time ordering
 time_map = pd.DataFrame({'time_id': time_id_ordered})
 time_map['bucket_idx'] = range(len(time_map))
 rv_df = rv_df.merge(time_map, on='time_id')
-
-# rv_df = pd.DataFrame(rv_data)
-
-# Create pivot table for analysis
 rv_pivot = rv_df.pivot(index='bucket_idx', columns='stock_id', values='rv')
-
-# Calculate average RV across all stocks for each time bucket
 avg_rv = rv_pivot.mean(axis=1)
 
-# Plot average RV trend
 plt.figure(figsize=(12, 6))
 avg_rv.plot(title="Average Realised Volatility Over Time", 
            xlabel="Bucket Index", ylabel="Average RV")
@@ -212,49 +197,12 @@ plt.tight_layout()
 plt.show()
 ```
 
-```{python}
-rv_pivot
-```
-
-$$
-     \text{avg\_RV}_t \;=\;\frac1N\sum_{i=1}^N \mathrm{RV}_{t,i}.
-   $$
-
-One of the main concern about time series data is on non-stationarity. While test like Augmented Dickey-Fuller exists to test the statistical significance of this it fails when there are breaks. So we decided to use Zivot–Andrews Statistic for this reason to test for non-stationarity. Below is the code for this.
+One challenge we had with the data is testing for stationary when there may be structural changes (breaks). The standard Audgmented Dickey-Fuller (ADF) test assumes the data-generation process is constant over time and often missclasiffies a series if there is a sudden shift as non-stationary. To address this we resorted to using the Zivot-Andrews test, which endogenously estimates and accounts for a single break in either the intercept or trend.
 
 ```{python}
 # Stationarity tests
-from statsmodels.tsa.stattools import adfuller, zivot_andrews
-
-# ADF test as baseline
-adf_stat, adf_p, *_ = adfuller(avg_rv.dropna())
-print(f"ADF test → statistic: {adf_stat:.3f}, p-value: {adf_p:.3f}")
-
-# Zivot–Andrews test for structural breaks
-za_stat, za_pval, za_cv, za_lag, za_bpidx = zivot_andrews(
-    avg_rv.dropna().values,
-    regression='ct',  # break in both intercept and trend
-    trim=0.15,
-    maxlag=12,
-    autolag='AIC'
-)
-
-print(f"Zivot–Andrews Statistic: {za_stat:.4f}")
-print(f"p-value: {za_pval:.4f}")
-print("Critical values:")
-for sig, cv in za_cv.items():
-    print(f"  {sig} : {cv:.4f}")
-print(f"Lags used in regression: {za_lag}")
-print(f"Estimated break at index: {za_bpidx}")
-```
-
-------- transform data
-
-```{python}
-# Add this after your existing avg_rv calculation
 from statsmodels.tsa.stattools import zivot_andrews
 
-# Test different stationarity transformations on YOUR actual data using Zivot-Andrews
 def test_stationarity(ts, name="Series"):
     """Test stationarity using Zivot-Andrews test (better for structural breaks)"""
     ts_clean = ts.dropna()
@@ -268,7 +216,6 @@ def test_stationarity(ts, name="Series"):
             autolag='AIC'
         )
         
-        # Check against 5% critical value
         is_stationary = za_stat < za_cv['5%']
         status = '✓ Stationary' if is_stationary else '✗ Non-stationary'
         
@@ -281,188 +228,58 @@ def test_stationarity(ts, name="Series"):
         print(f"{name:15} | ZA test failed: {str(e)}")
         return False
 
-print("Testing stationarity transformations on your Optiver data (Zivot-Andrews):")
-print("=" * 75)
-
-# Test original
-test_stationarity(avg_rv, "Original")
-
-# 1. Log + First Difference (recommended for volatility)
-log_rv = np.log(avg_rv + 1e-8)
-stationary_rv = log_rv.diff().dropna()
-is_stationary = test_stationarity(stationary_rv, "Log + Diff")
-
-# 2. Alternative: Log + Rolling Z-score  
-window = 100
-log_rolling_mean = log_rv.rolling(window=window, center=True).mean()
-log_rolling_std = log_rv.rolling(window=window, center=True).std()
-stationary_rv_alt = ((log_rv - log_rolling_mean) / log_rolling_std).dropna()
-test_stationarity(stationary_rv_alt, "Log + Z-score")
-
-# 3. Simple first difference
-simple_diff = avg_rv.diff().dropna()
-test_stationarity(simple_diff, "Simple Diff")
-
-# 4. Percentage change
-pct_change = avg_rv.pct_change().dropna()
-test_stationarity(pct_change, "Pct Change")
-
-# Use the best transformation for your GAT model
-if is_stationary:
-    final_stationary = stationary_rv
-    transform_method = "log_diff"
-    print(f"\n✅ Using log+diff transformation: {len(stationary_rv)} time points")
-else:
-    print(f"\n⚠️  Testing other transformations...")
-    # Test which one works best
+test_stationarity(avg_rv, "Average RV by Time")
 ```
 
------ plots for transformed data
+Looking at the above Average RV over time we can see that despite the Zivot-Andrews shows that the series is stationary around a broken trend it the model will see very different variance scales in chronological train vs test split that we will be discussing below. Because of this it was clearly logical to even out the regime shift with appropriate transformations on the data.
+
+#### 3.2.4 Transforming the data
+
+The goal is to compress the high volatilitspikes so the model doesnt treat them as tottaly out of smple. Hence, a good candidate we chose was log + first differences where $\epsilon=10^{-8}$ guards against `log(0)`. After transformation, the series oscillates around zero with roughly constant variance, making chronological splitting much more reliable (the model is no longer “blindsided” by a massive spike) while still being stationary.
+
+```{python}
+from statsmodels.tsa.stattools import zivot_andrews
+
+log_rv = np.log(avg_rv + 1e-8)
+stationary_rv = log_rv.diff().dropna()
+```
 
 ```{python}
 import matplotlib.pyplot as plt
 import numpy as np
 
-# After running your transformation code, plot the results
-def plot_volatility_transformation(avg_rv, transformed_data, transform_name="Log + Diff"):
-    """
-    Plot original vs transformed volatility data
-    
-    Parameters:
-    avg_rv: original average RV series
-    transformed_data: stationary transformed data
-    transform_name: name of transformation for title
-    """
-    
+def plot_volatility_transformation(avg_rv, transformed_data, transform_name="Log + Diff"):  
     fig, axes = plt.subplots(2, 1, figsize=(14, 10))
     
-    # Plot 1: Original data
     axes[0].plot(avg_rv.index, avg_rv.values, color='blue', linewidth=0.8)
     axes[0].set_title('Original Average Realised Volatility Over Time', fontsize=14)
     axes[0].set_ylabel('Average RV', fontsize=12)
     axes[0].grid(True, alpha=0.3)
-    
-    # Add annotation for the volatility spike
-    spike_idx = avg_rv.idxmax()
-    spike_val = avg_rv.max()
-    axes[0].annotate(f'Max volatility spike\n(Bucket {spike_idx})', 
-                    xy=(spike_idx, spike_val), 
-                    xytext=(spike_idx + 300, spike_val - 0.3),
-                    arrowprops=dict(arrowstyle='->', color='red', alpha=0.7),
-                    fontsize=10, color='red')
-    
-    # Plot 2: Transformed data
-    # Handle index adjustment for transformations that reduce length
-    if len(transformed_data) == len(avg_rv):
-        transform_index = avg_rv.index
-    else:
-        # For first difference, start from index 1
-        transform_index = avg_rv.index[1:len(transformed_data)+1]
+
+    #! start from index 1 after log diff transform 
+    transform_index = avg_rv.index[1:len(transformed_data)+1]
     
     axes[1].plot(transform_index, transformed_data.values, color='green', linewidth=0.8)
     axes[1].set_title(f'Transformed Volatility ({transform_name}) - Stationary', fontsize=14)
     axes[1].set_ylabel(f'Transformed RV ({transform_name})', fontsize=12)
-    axes[1].set_xlabel('Bucket Index', fontsize=12)
+    axes[1].set_xlabel('Time id', fontsize=12)
     axes[1].grid(True, alpha=0.3)
-    
-    # Add horizontal line at zero for transformed data
     axes[1].axhline(y=0, color='black', linestyle='--', alpha=0.5)
     
     plt.tight_layout()
     plt.show()
-    
-    # Print some summary statistics
-    print(f"Original data statistics:")
-    print(f"  Mean: {avg_rv.mean():.4f}, Std: {avg_rv.std():.4f}")
-    print(f"  Min: {avg_rv.min():.4f}, Max: {avg_rv.max():.4f}")
-    print(f"  Length: {len(avg_rv)}")
-    
-    print(f"\nTransformed data statistics ({transform_name}):")
-    print(f"  Mean: {transformed_data.mean():.4f}, Std: {transformed_data.std():.4f}")
-    print(f"  Min: {transformed_data.min():.4f}, Max: {transformed_data.max():.4f}")
-    print(f"  Length: {len(transformed_data)}")
 
-# Apply this after your transformation code:
-
-# For log + first difference
-log_rv = np.log(avg_rv + 1e-8)
-stationary_rv = log_rv.diff().dropna()
 plot_volatility_transformation(avg_rv, stationary_rv, "Log + First Diff")
 
-# For log + rolling z-score (if you want to compare)
-window = 100
-log_rolling_mean = log_rv.rolling(window=window, center=True).mean()
-log_rolling_std = log_rv.rolling(window=window, center=True).std()
-stationary_rv_zscore = ((log_rv - log_rolling_mean) / log_rolling_std).dropna()
-plot_volatility_transformation(avg_rv, stationary_rv_zscore, "Log + Rolling Z-score")
-
-# Alternative: Side-by-side comparison
-def plot_side_by_side_comparison(avg_rv, transformations_dict):
-    """
-    Plot multiple transformations side by side for comparison
-    
-    Parameters:
-    avg_rv: original data
-    transformations_dict: dict of {"name": transformed_series}
-    """
-    
-    n_transforms = len(transformations_dict)
-    fig, axes = plt.subplots(1, n_transforms + 1, figsize=(5 * (n_transforms + 1), 6))
-    
-    # Plot original
-    axes[0].plot(avg_rv.index, avg_rv.values, color='blue', linewidth=0.8)
-    axes[0].set_title('Original\nAverage RV', fontsize=12)
-    axes[0].set_ylabel('Average RV')
-    axes[0].grid(True, alpha=0.3)
-    
-    # Plot each transformation
-    colors = ['green', 'red', 'orange', 'purple', 'brown']
-    for i, (name, data) in enumerate(transformations_dict.items()):
-        # Handle index adjustment
-        if len(data) == len(avg_rv):
-            plot_index = avg_rv.index
-        else:
-            plot_index = avg_rv.index[1:len(data)+1]
-            
-        axes[i+1].plot(plot_index, data.values, color=colors[i % len(colors)], linewidth=0.8)
-        axes[i+1].set_title(f'{name}\n(Stationary)', fontsize=12)
-        axes[i+1].set_ylabel('Transformed RV')
-        axes[i+1].grid(True, alpha=0.3)
-        axes[i+1].axhline(y=0, color='black', linestyle='--', alpha=0.5)
-    
-    # Set common x-label
-    for ax in axes:
-        ax.set_xlabel('Bucket Index')
-    
-    plt.tight_layout()
-    plt.show()
-
-# Example usage for multiple transformations:
-transformations = {
-    "Log + Diff": stationary_rv,
-    "Log + Z-score": stationary_rv_zscore,
-    "Simple Diff": avg_rv.diff().dropna(),
-    "Pct Change": avg_rv.pct_change().dropna()
-}
-
-plot_side_by_side_comparison(avg_rv, transformations)
 ```
 
-```{python}
-stationary_rv.head()
-```
+Now that this transformation has worked as seens on the transformed volatility by time id plot we apply this transformation for each individual stock across its time_id
 
------ making the new RV panel with transform
 ```{python}
 import numpy as np
 import pandas as pd
 
-def create_stationary_features_fixed(rv_pivot, window=100):
-    """
-    Create stationary features WITHOUT future leakage
-    """
-    print("🔧 Creating stationary features without data leakage...")
-    
+def create_stationary_features_fixed(rv_pivot):
     if isinstance(rv_pivot, pd.DataFrame):
         rv_matrix = rv_pivot.values
     else:
@@ -470,103 +287,74 @@ def create_stationary_features_fixed(rv_pivot, window=100):
     
     T, N = rv_matrix.shape
     print(f"Input matrix: {T} time points × {N} stocks")
-    
-    # Method 1: Simple log + first difference (RECOMMENDED)
     log_rv = np.log(rv_matrix + 1e-8)
     stationary_rv = np.diff(log_rv, axis=0)  # Shape: (T-1, N)
-    
-    # Method 2: Alternative - Rolling z-score WITHOUT center=True
-    # rolling_mean = pd.DataFrame(log_rv).rolling(window=window, min_periods=1).mean().values
-    # rolling_std = pd.DataFrame(log_rv).rolling(window=window, min_periods=1).std().values
-    # stationary_rv_alt = (log_rv - rolling_mean) / (rolling_std + 1e-8)
-    
-    # Clean up any remaining NaNs/infs
-    stationary_rv = np.nan_to_num(stationary_rv, nan=0.0, posinf=0.0, neginf=0.0)
-    
-    print(f"Stationary matrix: {stationary_rv.shape}")
-    print(f"Stats - Mean: {np.mean(stationary_rv):.4f}, Std: {np.std(stationary_rv):.4f}")
-    print(f"Range: [{np.min(stationary_rv):.4f}, {np.max(stationary_rv):.4f}]")
-    
+  
+    stationary_rv = np.nan_to_num(stationary_rv, nan=0.0, posinf=0.0, neginf=0.0)    
     return stationary_rv
 
-transformed_rv_pivot = create_stationary_features_fixed(rv_pivot, window=100)
-
-# Verify the transformation worked
-print("\n" + "="*60)
-print("TRANSFORMATION VERIFICATION")
-print("="*60)
-
-# Check statistics before and after
-print(f"Original rv_pivot:")
-if isinstance(rv_pivot, pd.DataFrame):
-    orig_values = rv_pivot.values
-else:
-    orig_values = rv_pivot
-    
-print(f"  Shape: {orig_values.shape}")
-print(f"  Mean: {np.nanmean(orig_values):.4f}, Std: {np.nanstd(orig_values):.4f}")
-print(f"  Min: {np.nanmin(orig_values):.4f}, Max: {np.nanmax(orig_values):.4f}")
-print(f"  NaN count: {np.isnan(orig_values).sum()}")
-
-print(f"\nTransformed rv_pivot:")
-print(f"  Shape: {transformed_rv_pivot.shape}")
-print(f"  Mean: {np.nanmean(transformed_rv_pivot):.4f}, Std: {np.nanstd(transformed_rv_pivot):.4f}")
-print(f"  Min: {np.nanmin(transformed_rv_pivot):.4f}, Max: {np.nanmax(transformed_rv_pivot):.4f}")
-print(f"  NaN count: {np.isnan(transformed_rv_pivot).sum()}")
-
-# Test stationarity on a few random stocks
-from statsmodels.tsa.stattools import zivot_andrews
-
-def test_stock_stationarity(rv_matrix, stock_indices=None, max_stocks=5):
-    """Test stationarity for individual stocks"""
-    if stock_indices is None:
-        stock_indices = np.random.choice(rv_matrix.shape[1], min(max_stocks, rv_matrix.shape[1]), replace=False)
-    
-    print(f"\nTesting stationarity for {len(stock_indices)} random stocks:")
-    print("-" * 50)
-    
-    stationary_count = 0
-    for i, stock_idx in enumerate(stock_indices):
-        stock_data = rv_matrix[:, stock_idx]
-        stock_data_clean = stock_data[~np.isnan(stock_data)]
-        
-        if len(stock_data_clean) > 50:  # minimum data points for ZA test
-            try:
-                za_stat, za_pval, za_cv, _, _ = zivot_andrews(
-                    stock_data_clean, regression='ct', trim=0.15, maxlag=12, autolag='AIC'
-                )
-                is_stationary = za_stat < za_cv['5%']
-                status = '✓ Stationary' if is_stationary else '✗ Non-stationary'
-                print(f"Stock {stock_idx:3d}: ZA={za_stat:6.3f} (p={za_pval:.3f}) {status}")
-                if is_stationary:
-                    stationary_count += 1
-            except:
-                print(f"Stock {stock_idx:3d}: ZA test failed")
-        else:
-            print(f"Stock {stock_idx:3d}: Insufficient data")
-    
-    print(f"\nStationarity rate: {stationary_count}/{len(stock_indices)} stocks")
-    return stationary_count / len(stock_indices)
-
-# Test original vs transformed
-print("\nOriginal rv_pivot stationarity:")
-orig_stat_rate = test_stock_stationarity(orig_values)
-
-print("\nTransformed rv_pivot stationarity:")
-trans_stat_rate = test_stock_stationarity(transformed_rv_pivot)
-
-print(f"\n📊 IMPROVEMENT: {trans_stat_rate:.1%} stationary (vs {orig_stat_rate:.1%} original)")
-
-# Update your existing pipeline to use transformed data
-print("\n" + "="*60)
-print("UPDATING YOUR GAT PIPELINE")
-print("="*60)
+transformed_rv_pivot = create_stationary_features_fixed(rv_pivot)
 ```
-
 
 ## 4. Methodology
 
 4.1 Feature engineering
+
+We need to enrich the `transformed_rv_pivot` ($T \times N$) where `T` is the number of time buckets and `N` is the number of stocks with more detail to increase the information gain of the data for the GAT model to learn both temporal pattern and short term fluctuations. Inorder to achieve this we proceeded with the following features (See appendix for more detail on features):
+
+1.  Own-RV lags: RV often exhibits **auto-persistence**: a high‐volatility bucket tends to be followed by elevated volatility. So for each stock we included the precious three bucktes of transformed RV to capture the short-term persistence of volaitlity.
+2.  Volatiliity Momentum: Beyond raw persistence, we want to capture **changes in the short-term trend**—for example, if volatility is accelerating or decelerating, this was done by calucalting difference between the average RV over most recent and preceding three buckets
+3.  Mean reversion tendency: empirically, volatility often **reverts toward a longer‐term mean** after extreme moves. We calculate the negative deviation of the current RV from its ten‐bucket rolling average, encoding how strongly each stock’s volatility is “pulled back” toward a longer‐term mean.
+4.  Volatility of volatility: Some stocks exhibit **wild swings in volatility itself** (for instance, jumps around earnings). We take the rolling standard deviation of the last five buckets of RV for each stock, quantifying how erratic or “jittery” the volatility itself has been over that short window
+
+All calculation of these is done per stock.
+
+```{python}
+def build_initial_features(stationary_rv):
+    T, N = stationary_rv.shape
+    features_list = []
+    
+    # 1. Own-RV lags
+    lags = [1, 2, 3]
+    for lag in lags:
+        lag_feat = np.zeros((T, N))
+        if lag < T:
+            lag_feat[lag:, :] = stationary_rv[:-lag, :]
+        features_list.append(lag_feat[:, :, np.newaxis])
+    
+    # 2. Volatility momentum
+    vol_momentum = np.zeros((T, N, 1))
+    for t in range(6, T):
+        recent = np.mean(stationary_rv[t-3:t], axis=0)
+        past = np.mean(stationary_rv[t-6:t-3], axis=0)
+        vol_momentum[t, :, 0] = recent - past
+    features_list.append(vol_momentum)
+    
+    # 3. Mean reversion tendency
+    mean_reversion = np.zeros((T, N, 1))
+    for t in range(10, T):
+        window = stationary_rv[t-10:t]
+        mean_val = np.mean(window, axis=0)
+        current_deviation = stationary_rv[t] - mean_val
+        mean_reversion[t, :, 0] = -current_deviation  # the tendency to revert
+    features_list.append(mean_reversion)
+    
+    # 4. Volatility of volatility
+    vol_of_vol = np.zeros((T, N, 1))
+    for t in range(5, T):
+        window_std = np.std(stationary_rv[t-5:t], axis=0)
+        vol_of_vol[t, :, 0] = window_std
+    features_list.append(vol_of_vol)
+    
+    X_initial = np.concatenate(features_list, axis=2)  # Shape: (T, N, 6)
+    X_initial = np.nan_to_num(X_initial, nan=0.0, posinf=0.0, neginf=0.0)
+    
+    print(f"Initial features: {X_initial.shape} (T × N × {X_initial.shape[2]} features)")
+    return X_initial
+
+X_initial_features = build_initial_features(transformed_rv_pivot)
+
+```
 
 ### 4.2 Graph construction & GAT architecture
 
@@ -574,7 +362,9 @@ In this section we describe how we turned the above denormaised price matrix int
 
 #### 4.2.1 Building the neighbour graph and GAT
 
-After the pruning and aligning of the stocks with the threshold dropp rate of 0.01% on missing buckets, for each stock we processed to analyse the neighbours by a T length price trajectory. Each stock is a point in $\mathbb{R}^T$. We Min-Max scale and query a KD-tree.
+**What & why.** For every stock we embed the most-recent 50-bucket price signature, this was done because stock relationships change over time! Stocks that moved together 2 years ago might not move together now (A logical assumption we made). and use a KD-tree to find its K=3 nearest neighbors. This captures *current* co-movement, recognizing that relationships drift over time.\
+
+**Returns.** A PyG-ready `edge_index` (source–destination pairs) and exponentially decaying `edge_weight`, plus the raw neighbor matrix and the list of stocks that survived NaN screening and with this, we captured 88% of the Optiver universe within the data
 
 ```{python}
 from sklearn.preprocessing import MinMaxScaler
@@ -582,64 +372,52 @@ from sklearn.neighbors import KDTree
 import torch
 import numpy as np
 
-K = 3  # number of neighbours per node
+def build_graph_on_features(X_features, time_window=50, K=3):
+    T, N, F = X_features.shape
+    
+    # Use recent time window for similarity (stocks change over time)
+    if time_window < T:
+        recent_features = X_features[-time_window:, :, :]  # Last 50 time steps
+    else:
+        recent_features = X_features
+        
+    X_for_graph = recent_features.transpose(1, 0, 2).reshape(N, -1)
+    
+    # Remove stocks with missing features
+    valid_stocks = ~np.isnan(X_for_graph).any(axis=1)
+    X_clean = X_for_graph[valid_stocks]
+    valid_indices = np.where(valid_stocks)[0]
+    print(f"   Valid stocks: {len(valid_indices)} / {len(valid_stocks)}")
+    
+    # Min-Max scale feature space and build tree
+    X_scaled = MinMaxScaler().fit_transform(X_clean)
+    tree = KDTree(X_scaled, metric='euclidean')
+    dist, nbr_raw = tree.query(X_scaled, k=K+1)  # includes self
+    
+    # mapping back to original indices
+    nbr = valid_indices[nbr_raw]
+    src = np.repeat(valid_indices, K)
+    dst = nbr[:, 1:].ravel()
+    edge_index = torch.tensor([src, dst], dtype=torch.long)
+    edge_weight = torch.exp(-torch.tensor(dist[:, 1:].ravel(), dtype=torch.float))
+    
+    return edge_index, edge_weight, nbr, valid_indices
 
-# Convert rv_pivot to numpy array if needed
-if isinstance(rv_pivot, pd.DataFrame):
-    rv_matrix = rv_pivot.values
-else:
-    rv_matrix = rv_pivot
-
-# Transpose to (N stocks × T time_points) for KDTree
-X_volatility = rv_matrix.T  
-print(f"Building volatility-based graph: {X_volatility.shape} (N × T)")
-
-# Remove stocks with missing data
-valid_stocks = ~np.isnan(X_volatility).any(axis=1)
-X_clean = X_volatility[valid_stocks]
-valid_indices = np.where(valid_stocks)[0]
-print(f"Valid stocks: {len(valid_indices)} / {len(valid_stocks)}")
-
-# Min-Max scale and build KDTree
-X_scaled = MinMaxScaler().fit_transform(X_clean)
-tree = KDTree(X_scaled, metric='euclidean')
-dist, nbr_raw = tree.query(X_scaled, k=K+1)  # includes self at index 0
-
-# Map back to original stock indices
-nbr = valid_indices[nbr_raw]
-
-# Build edge index & weights (exclude self-loops)
-src = np.repeat(valid_indices, K)
-dst = nbr[:, 1:].ravel()
-edge_index = torch.tensor([src, dst], dtype=torch.long)
-edge_weight = torch.exp(-torch.tensor(dist[:, 1:].ravel(), dtype=torch.float))
-
-print(f"Graph: {len(valid_indices)} nodes, {len(edge_index[0])} edges")
-
+edge_index, edge_weight, neighbor_indices, valid_indices = build_graph_on_features(
+    X_initial_features, time_window=50, K=3
+)
 ```
 
-
------ updating the features ! include 5 LOB features insetad of volatility momentum
-For each bucket $t$ and stock $i$ we then build node level features which include Own-RV lags (lags 1, 2, 3), Mean neighbour RV and other order‐book micro-features.
+What & why. Using the neighbor matrix below, we compute for every bucket `t` the average log-diff RV of each stock’s three neighbours and stack it with the six temporal channels built in § 4.1. This single cross-sectional feature gives the GAT some market “consensus” signal without inflating the feature dimension. We add the six temporal chanels and the one neighbour chanfel to X_transformed converting it to a tensor for later training.
 
 ```{python}
-
-# Now update your feature engineering to use the transformed rv_pivot
-def build_features_fixed(stationary_rv, neighbor_indices):
+def build_neighbour_feats(stationary_rv, neighbor_indices):
     """
     Build features properly with correct dimensions
     """
     T, N = stationary_rv.shape
-    
-    # 1. Own-RV lags (3 features)
-    lags = [1, 2, 3]
-    own_feats = np.zeros((T, N, len(lags)))
-    
-    for i, lag in enumerate(lags):
-        if lag < T:
-            own_feats[lag:, :, i] = stationary_rv[:-lag, :]
-    
-    # 2. Neighbor mean RV (1 feature)
+  
+    # Neighbor mean RV (1 feature)
     nei_mean = np.zeros((T, N, 1))
     for i in range(N):
         if i < len(neighbor_indices) and len(neighbor_indices[i]) > 1:
@@ -647,46 +425,21 @@ def build_features_fixed(stationary_rv, neighbor_indices):
             nei_idx = nei_idx[nei_idx < N]  # ensure valid indices
             if len(nei_idx) > 0:
                 nei_mean[:, i, 0] = stationary_rv[:, nei_idx].mean(axis=1)
-    
-    # 3. Volatility momentum (1 feature)
-    vol_momentum = np.zeros((T, N, 1))
-    for t in range(6, T):
-        recent = np.mean(stationary_rv[t-3:t], axis=0)
-        past = np.mean(stationary_rv[t-6:t-3], axis=0)
-        vol_momentum[t, :, 0] = recent - past
-    
-    # Concatenate features
-    X = np.concatenate([own_feats, nei_mean, vol_momentum], axis=2)  # Shape: (T, N, 5)
-    
+        
     # Clean up
-    X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+    X = np.nan_to_num(nei_mean, nan=0.0, posinf=0.0, neginf=0.0)
     
     print(f"✅ Features created: {X.shape} (T × N × {X.shape[2]} features)")
     
     return X, stationary_rv
 
-# Create features using transformed data
-X_transformed, y_transformed = build_features_fixed(transformed_rv_pivot, nbr)
+X_transformed, y_transformed = build_neighbour_feats(transformed_rv_pivot, neighbor_indices)
 
-print(f"✅ Features created from transformed data:")
-print(f"   X shape: {X_transformed.shape} (T × N × Features)")
-print(f"   y shape: {y_transformed.shape} (T × N)")
-print(f"   Features per node: {X_transformed.shape[2]}")
-
-# Convert to tensors for GAT
-import torch
 X_tensor_transformed = torch.tensor(X_transformed, dtype=torch.float)
 y_tensor_transformed = torch.tensor(y_transformed, dtype=torch.float)
-
-print(f"\n🎯 Ready for GAT training with transformed stationary data!")
-print(f"   Input tensor: {X_tensor_transformed.shape}")
-print(f"   Target tensor: {y_tensor_transformed.shape}")
-
-# Save transformation parameters for later use
-print(f"\n💾 Transformation parameters saved for inverse transformation during evaluation")
 ```
 
-Then to learn the dynamic weightninigs of the neighbiurse we deine a simple 2-layer GAT that lets each stock fuse its own history with weighted neighbour signals.
+Then to learn the dynamic weightninigs of the neighbiurse we defined a simple 2-layer GAT that lets each stock fuse its own history with weighted neighbour signals.
 
 ```{python}
 import torch
@@ -737,49 +490,15 @@ class ImprovedVolatilityGAT(torch.nn.Module):
 
 #### 4.2.2 Training, Loss and Cross Validation
 
-We train on the Root Mean Squared Percentage Error (RMSPE), defined per bucket $t$ as guided by Optiver in the Kaggle competition for the loss function (Refer Appendix for details) as it focuses on the models relative errors, unlike aboslute error which understate risk. In our version in order to prevent division by zero issues we add a small $\epsilon = 10^-8$.
+We decided to use a hybrid approach for an optimum loss function. We first scale the means squared error by the target series own variance which will give a unit free % of variance magnitude penalty, then mix with a directional penalty that rises when the model get the sign of the volatility change wrong.
 
 ```{python}
-# def rmspe_loss(y_pred, y_true, eps=1e-8):
-#    return torch.sqrt(torch.mean(((y_pred - y_true)/(y_true + eps))**2))
-
-def stationary_mse_loss(y_pred, y_true):
-    """
-    Simple MSE loss for stationary data - much more stable than RMSPE
-    """
-    return F.mse_loss(y_pred, y_true)
-
-def log_cosh_percentage_loss(y_pred, y_true):
-    """
-    Log-cosh loss with percentage interpretation
-    Smooth, robust alternative to MSE with built-in percentage scaling
-    """
-    target_scale = torch.std(y_true)
-    scaled_error = (y_pred - y_true) / target_scale
-    log_cosh = torch.log(torch.cosh(scaled_error))
-    return torch.mean(log_cosh) * 100
-
 def relative_mse_percentage_loss(y_pred, y_true):
-    """
-    🏆 RECOMMENDED: MSE as percentage of target variance
-    Perfect for your transformed stationary data!
-    
-    Returns: Percentage value (e.g., 15.5 means 15.5% error)
-    """
     mse = F.mse_loss(y_pred, y_true)
     target_var = torch.var(y_true) + 1e-8  # Add small epsilon for stability
     return (mse / target_var) * 100
 
 def hybrid_volatility_loss(y_pred, y_true, alpha=0.8):
-    """
-    🥉 ADVANCED: Combines magnitude + direction prediction
-    Best for trading applications where direction matters
-    
-    Parameters:
-    - alpha: Weight for magnitude error (0.8 = 80% magnitude, 20% direction)
-    
-    Returns: Combined percentage score
-    """
     # Magnitude component (relative MSE)
     magnitude_loss = relative_mse_percentage_loss(y_pred, y_true)
     
@@ -793,8 +512,6 @@ def hybrid_volatility_loss(y_pred, y_true, alpha=0.8):
     return alpha * magnitude_loss + (1 - alpha) * direction_loss
     
 ```
-
-Despite the chronological splits advantages we wanted to make sure the model wont get a lucky/unlucky with market regime in validation period. There were unique chalenges the model faces beyond the regime shifts including Attention mechanism stability across different market conditions, Graph topology effectiveness (from KD-tree neighbors) to name a few and to elimate all these as much as possible we went with a 8 fold cross validation with early stopping to prevent overffitting on a single time period and to find the best GAT architecture (hidden dims, heads, dropout) without contaminating your final test set.
 
 ```{python}
 import torch
@@ -978,8 +695,6 @@ def train_gat_fixed(X, y, edge_index, edge_weight, device='cpu'):
     
     return fold_results
 ```
-
-
 
 ```{python}
 # Step 3: Train with fixed pipeline
