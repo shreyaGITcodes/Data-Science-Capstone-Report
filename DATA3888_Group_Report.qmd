@@ -542,7 +542,7 @@ $$
 - Measure the average difference between prediction and actual values in percentage format
 - It is easy to interpret and it is scale-independent
 $$
-\text{MAPE} = \frac{100\%}{n} \sum_{t=1}^n \left| \frac{y_t - \hat{y}_t}{y_t} \right|
+\text{MAPE} = \frac{1}{n} \sum_{t=1}^n \left| \frac{y_t - \hat{y}_t}{y_t} \right|
 $$
 ## Data-Splitting 
 
