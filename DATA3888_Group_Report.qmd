@@ -749,13 +749,13 @@ calculate_performance_metrics()
 ```
 We assess the Graph Attention Network model on the test set using standard volatility forecasting metrics: Root Mean Squared Percentage Error (RMSPE), Mean Absolute Percentage Error (MAPE), and QLIKE loss. RMSPE is the main metric, while QLIKE penalizes under-prediction of variance. Lower values across all metrics indicate better accuracy.
 
-The cross-sectional evaluation on the last 10% of data shows clear performance differences. GAT performs best across all metrics: RMSE of 0.001236, RMSPE of 0.57, QLIKE of 0.092128, and MAPE of 0.46, as shown in @tbl-performance
+The cross-sectional evaluation shows clear performance differences among models. GAT outperforms other models across all metrics: RMSE of 0.600356, QLIKE of 0.041425, MAPE of 22.48, and RMSPE of 34.40, as shown in the performance table.
 
-Traditional models perform well: HAR_RV and PCA_Linear show similar results (RMSE ~0.0017, RMSPE ~0.60), while Linear model performs comparably. LAG model shows moderate performance with higher relative errors.
+Traditional models exhibit competitive performance: PCA_Linear is best among traditional methods (RMSE: 0.956301, RMSPE: 0.54, QLIKE: 0.178410, MAPE: 0.40), followed by Random_Forest (RMSE: 0.960064, RMSPE: 0.59) and HAR_RV (RMSE: 0.964477, RMSPE: 0.63). The Linear model is as good (RMSE: 0.977705), whereas LAG model is worst with the highest error measures (RMSE: 1.016574, RMSPE: 0.77).
 
-Machine learning models show mixed results: Random_Forest has reasonable accuracy but higher relative errors (RMSPE: 1.50, MAPE: 1.21), while Gradient_Boosting underperforms significantly (RMSPE: 2.48, MAPE: 2.00).
+Machine learning method have mixed performances: Random_Forest is a bit better than Gradient_Boosting on almost every measure. However, Gradient_Boosting performs acceptably (RMSE: 0.983840, RMSPE: 0.65, MAPE: 0.47) but cannot surpass the less complex PCA_Linear algorithm.
 
-The results show GAT's effectiveness in capturing complex volatility patterns, while traditional models remain competitive despite simpler structures.
+These findings point to GAT's better performance in capturing complicated volatility structures, with PCA_Linear being the best performing conventional method.
 
 
 5.2 Error analysis & regime split
