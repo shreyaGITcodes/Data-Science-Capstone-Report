@@ -858,7 +858,7 @@ The Graph Attention Transformer (GAT) model exhibits significant forecast errors
 
 In the top-decile volatility regime, this pattern of under-prediction followed by over-prediction contributes to a tangible increase in Root Mean Square Error (RMSE). However, it is worth noting that, even in these extreme conditions, the GAT model outperforms all benchmark methods.
 
-In less volatile conditions, the model maintains a tight fit, with fluctuations exhibiting minimal residuals. This consistency is quantified by an overall test Root Mean Square Error (RMSE) of 0.001252, as indicated in the figure title. It is evident that the majority of prediction error is concentrated within a limited number of spike windows. 
+In less volatile conditions, the model maintains a tight fit, with fluctuations exhibiting minimal residuals. This consistency is quantified by an overall test Root Mean Square Error (RMSE) of 0.600356, as indicated in the figure title. It is evident that the majority of prediction error is concentrated within a limited number of spike windows. 
 
 All baseline models underpredict during volatility spike as seen in @fig-model-comparison. Among all models, HAR-RV and PCA are more consistent in tracking overall volatility level and less sensitive to outliers compared with Random Forest and Gradient Boosting. 
 
