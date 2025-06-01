@@ -631,7 +631,7 @@ for stock in real_volatility.columns:
 - Evaluated whether there are trends in the data
 - **Hyperparameters Tuning:** Moving average window sizes [3, 5, 7, 10]
 - **Features:** Time trend, lag1, lag2, moving average
-- **Result (Most Common):** 10-day window 
+- **Result (Most Common):** 5 windows 
 
 
 
