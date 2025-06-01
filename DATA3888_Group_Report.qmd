@@ -76,7 +76,6 @@ from sklearn.ensemble import GradientBoostingRegressor
 from itertools import product
 import warnings
 from pandas.errors import PerformanceWarning
-=
 # Suppress fragmentation warnings from pandas
 warnings.filterwarnings("ignore", category=PerformanceWarning)
 real_volatility = pd.read_csv('real_volatility.csv', index_col=0)
@@ -118,40 +117,39 @@ def metric(prediction, actual):
 ``` {python, warning=false}
 # lists to store result
 har_panel = pd.DataFrame()
-QLIKE_list = []
 RMSE_list = []
+QLIKE_list = []
 RMPSE_list = []
 MAPE_list = []
-
 # Dictionary to store best parameters for each stock
 best_params_dict = {}
 
 # Hyperparameter Tuning
 lag_matrix = {
-    'daily': [1],
-    'weekly': [5, 7],
-    'monthly': [22, 30]
+    'short': [1],
+    'medium': [5, 7],
+    'long': [22, 30]
 }
-lag_matrix = list(product(lag_matrix['daily'], lag_matrix['weekly'], lag_matrix['monthly']))
+
+lag_matrix = list(product(lag_matrix['short'], lag_matrix['medium'], lag_matrix['long']))
 
 # go through each unique stock
 for stock in real_volatility.columns:  
     stock_series = real_volatility[stock]
-    log_stock = np.log(stock_series)
 
     # Initialise the best performance tracker
     final_MAPE = float('inf')
     final_Prediction = None
     final_Actual = None
-    best_params = None  # Track best parameters for this stock
+    best_params = None  
 
     # Grid Search each combination
-    for daily, weekly, monthly in lag_matrix:
-        har_data = pd.DataFrame({'volatility': log_stock})      
-        har_data['rv_day'] = log_stock.shift(daily)
-        har_data['rv_week'] = log_stock.rolling(window=weekly).mean().shift(1)
-        har_data['rv_month'] = log_stock.rolling(window=monthly).mean().shift(1)
-        har_data['trend'] = np.arange(len(log_stock))
+    for short, medium, long in lag_matrix:
+        har_data = pd.DataFrame({'volatility': stock_series})      
+        har_data['rv_short'] = stock_series.shift(short)
+        har_data['rv_medium'] = stock_series.rolling(window=medium).mean().shift(1)
+        har_data['rv_long'] = stock_series.rolling(window=long).mean().shift(1)
+        har_data['trend'] = np.arange(len(stock_series))
         har_data = har_data.dropna()
 
         # Train-Validation-Test split
@@ -163,22 +161,25 @@ for stock in real_volatility.columns:
         har_validation = har_data.iloc[train_size:train_size + validation_size]
         har_test = har_data.iloc[train_size + validation_size:]
 
-        feature_columns = ['rv_day', 'rv_week', 'rv_month', 'trend']
+        feature_columns = ['rv_short', 'rv_medium', 'rv_long', 'trend']
         
         # Prepare the dataset 
         train_X = har_train[feature_columns]
         train_y = har_train['volatility']
         validation_X = har_validation[feature_columns]
         validation_y = har_validation['volatility']
+        if train_X.empty or validation_X.empty:
+            print(f"Skipping {stock} with lags (short:{short}, medium:{medium}, long:{long}) due to insufficient data.")
+            continue
 
         # fit the linear model
         har_model = LinearRegression()
         har_model.fit(train_X, train_y)
 
         # evaluate on the validation set
-        validation_prediction = np.exp(har_model.predict(validation_X))
-        validation_actual = np.exp(validation_y)
-        validation_RMSE, validation_QLIKE, validation_RMPSE, validation_MAPE = metric(validation_actual, validation_prediction)
+        validation_Prediction = np.exp(har_model.predict(validation_X))
+        validation_Actual = np.exp(validation_y)
+        validation_RMSE, validation_QLIKE, validation_RMPSE, validation_MAPE = metric(validation_Prediction, validation_Actual)
 
         # check if this the best lag combination
         if validation_MAPE < final_MAPE:
@@ -195,7 +196,7 @@ for stock in real_volatility.columns:
             final_Actual = np.exp(test_y)
             
             # Store best parameters for this stock
-            best_params = {'daily': daily, 'weekly': weekly, 'monthly': monthly}
+            best_params = {'short': short, 'medium': medium, 'long': long}
 
     # Store Result
     if final_Prediction is not None:
@@ -212,12 +213,10 @@ for stock in real_volatility.columns:
 
 ### Lag-Model
 ``` {python, warning=false, echo=false} 
-
-
 # lists to store the value
 lag_panel = pd.DataFrame()
-QLIKE_list = []
 RMSE_list = []
+QLIKE_list = []
 RMPSE_list = []
 MAPE_list = []
 # Dictionary to store best lag parameter for each stock
@@ -230,23 +229,22 @@ Lag = [1, 2, 3, 4, 5]
 # Go through each stock
 for stock in real_volatility.columns:  
     stock_series = real_volatility[stock]
-    log_stock = np.log(stock_series)
 
     # Initialise for the best performance tracker
     final_MAPE = float('inf')
     final_Prediction = None
     final_Actual = None
     final_index = None
-    best_lag = None  # Track best lag for this stock
+    best_lag = None  
 
     # go through each lag threshold
     for lag in Lag:
         
         # feature set
         lag_data = pd.DataFrame({
-            'volatility': log_stock,
-            'lag': log_stock.shift(lag),
-            'trend': np.arange(len(log_stock))})
+            'volatility': stock_series,
+            'lag': stock_series.shift(lag),
+            'trend': np.arange(len(stock_series))})
         lag_data = lag_data.dropna()
 
         # Train-Validation-Test split
@@ -288,8 +286,7 @@ for stock in real_volatility.columns:
 
     # store the result
     if final_Prediction is not None:
-        lag_panel[stock] = pd.Series(final_Prediction, index=final_index)
-      
+        lag_panel[stock] = pd.Series(final_Prediction, index=final_index)  
 ```
 - Used only the recent volatility to predict volatility
 - Served as a benchmark and captured short-term correlation
@@ -301,8 +298,8 @@ for stock in real_volatility.columns:
 ``` {python}
 # List to store value
 pca_linear_panel = pd.DataFrame()
-QLIKE_list = []
 RMSE_list = []
+QLIKE_list = []
 RMPSE_list = []
 MAPE_list = []
 # Dictionary to store best variance threshold for each stock
@@ -314,20 +311,19 @@ variance_threshold = [0.9, 0.93, 0.95, 0.97, 0.99]
 # Go through each individual stock
 for stock in real_volatility.columns:  
     stock_series = real_volatility[stock]
-    log_stock = np.log(stock_series)
 
     # feature set
     pca_data = pd.DataFrame({
-        'volatility': log_stock,
-        'trend': np.arange(len(log_stock)),
-        'lag1': log_stock.shift(1),
-        'lag2': log_stock.shift(2),
-        'lag3': log_stock.shift(3),
-        'moving_avg_3': log_stock.rolling(window=3).mean().shift(1),
-        'moving_avg_5': log_stock.rolling(window=5).mean().shift(1),
-        'moving_avg_10': log_stock.rolling(window=10).mean().shift(1),
-        'std_5': log_stock.rolling(window=5).std().shift(1),
-        'std_10': log_stock.rolling(window=10).std().shift(1)})
+        'volatility': stock_series,
+        'trend': np.arange(len(stock_series)),
+        'lag1': stock_series.shift(1),
+        'lag2': stock_series.shift(2),
+        'lag3': stock_series.shift(3),
+        'moving_avg_3': stock_series.rolling(window=3).mean().shift(1),
+        'moving_avg_5': stock_series.rolling(window=5).mean().shift(1),
+        'moving_avg_10': stock_series.rolling(window=10).mean().shift(1),
+        'std_5': stock_series.rolling(window=5).std().shift(1),
+        'std_10': stock_series.rolling(window=10).std().shift(1)})
 
     pca_data = pca_data.dropna()
 
@@ -371,9 +367,9 @@ for stock in real_volatility.columns:
         pca_linear_model = LinearRegression()
         pca_linear_model.fit(train_pca, train_y)
 
-        validation_prediction = np.exp(pca_linear_model.predict(validation_pca))
-        validation_actual = np.exp(validation_y)
-        validation_RMSE, validation_QLIKE, validation_RMPSE, validation_MAPE = metric(validation_actual, validation_prediction)
+        validation_Prediction = np.exp(pca_linear_model.predict(validation_pca))
+        validation_Actual = np.exp(validation_y)
+        validation_RMSE, validation_QLIKE, validation_RMPSE, validation_MAPE = metric(validation_Prediction, validation_Actual)
 
         # check if this is the best variance 
         if validation_MAPE < final_MAPE:
@@ -388,6 +384,7 @@ for stock in real_volatility.columns:
     final_Prediction = np.exp(test_prediction)
     final_Actual = np.exp(test_y)
     pca_linear_panel[stock] = pd.Series(final_Prediction, index=pca_test.index)
+
 ```
 - simplified the data by reducing noise and dimensionality then applied linear regression 
 - help the model to focus on the most informative component of the data
@@ -401,8 +398,8 @@ for stock in real_volatility.columns:
 #| eval: false
 #| echo: false
 rf_panel = pd.DataFrame()
-QLIKE_list = []
 RMSE_list = []
+QLIKE_list = []
 RMPSE_list = []
 MAPE_list = []
 # Dictionary to store best n_estimators for each stock
@@ -412,21 +409,20 @@ n_estimators = [200, 300, 500]
 
 for stock in real_volatility.columns:  
     stock_series = real_volatility[stock]
-    log_stock = np.log(stock_series)
 
     rf_data = pd.DataFrame({
-        'volatility': log_stock,
-        'trend': np.arange(len(log_stock)),
-        'lag1': log_stock.shift(1),
-        'lag2': log_stock.shift(2),
-        'lag3': log_stock.shift(3),
-        'moving_avg_3': log_stock.rolling(window=3).mean().shift(1),
-        'moving_avg_5': log_stock.rolling(window=5).mean().shift(1),
-        'moving_avg_10': log_stock.rolling(window=10).mean().shift(1),
-        'std_5': log_stock.rolling(window=5).std().shift(1),
-        'std_10': log_stock.rolling(window=10).std().shift(1),
-        'max_5': log_stock.rolling(window=5).max().shift(1),
-        'min_5': log_stock.rolling(window=5).min().shift(1)})
+        'volatility': stock_series,
+        'trend': np.arange(len(stock_series)),
+        'lag1': stock_series.shift(1),
+        'lag2': stock_series.shift(2),
+        'lag3': stock_series.shift(3),
+        'moving_avg_3': stock_series.rolling(window=3).mean().shift(1),
+        'moving_avg_5': stock_series.rolling(window=5).mean().shift(1),
+        'moving_avg_10': stock_series.rolling(window=10).mean().shift(1),
+        'std_5': stock_series.rolling(window=5).std().shift(1),
+        'std_10': stock_series.rolling(window=10).std().shift(1),
+        'max_5': stock_series.rolling(window=5).max().shift(1),
+        'min_5': stock_series.rolling(window=5).min().shift(1)})
 
     rf_data = rf_data.dropna()
 
@@ -457,7 +453,7 @@ for stock in real_volatility.columns:
         rf_model.fit(train_X, train_y)
         validation_Prediction = np.exp(rf_model.predict(validation_X))
         validation_Actual = np.exp(validation_y)
-        validation_RMSE, validation_QLIKE, validation_RMPSE, validation_MAPE = metric(validation_Actual, validation_Prediction)
+        validation_RMSE, validation_QLIKE, validation_RMPSE, validation_MAPE = metric(validation_Prediction, validation_Actual)
 
         if validation_MAPE < final_MAPE:
             final_MAPE = validation_MAPE
@@ -466,6 +462,7 @@ for stock in real_volatility.columns:
             best_n = n  # Store best n_estimators
 
     rf_panel[stock] = pd.Series(final_Prediction, index=rf_test.index)
+
 
 ```
 - Built multiple decision trees and averaged the result
@@ -482,8 +479,8 @@ for stock in real_volatility.columns:
 #| echo: false
 gb_panel = pd.DataFrame()
 QLIKE_list = []
-RMSE_list = []
-RMPSE_list = []
+MSE_list = []
+DA_list
 MAPE_list = []
 # Dictionary to store best learning rate for each stock
 best_lr_dict = {}
@@ -492,21 +489,20 @@ learning_rate = [0.01, 0.05, 0.1]
 
 for stock in real_volatility.columns:  
     stock_series = real_volatility[stock]
-    log_stock = np.log(stock_series)
 
     gb_data = pd.DataFrame({
-        'volatility': log_stock,
-        'trend': np.arange(len(log_stock)),
-        'lag1': log_stock.shift(1),
-        'lag2': log_stock.shift(2),
-        'lag3': log_stock.shift(3),
-        'moving_avg_3': log_stock.rolling(window=3).mean().shift(1),
-        'moving_avg_5': log_stock.rolling(window=5).mean().shift(1),
-        'moving_avg_10': log_stock.rolling(window=10).mean().shift(1),
-        'std_5': log_stock.rolling(window=5).std().shift(1),
-        'std_10': log_stock.rolling(window=10).std().shift(1),
-        'max_5': log_stock.rolling(window=5).max().shift(1),
-        'min_5': log_stock.rolling(window=5).min().shift(1)})
+        'volatility': stock_series,
+        'trend': np.arange(len(stock_series)),
+        'lag1': stock_series.shift(1),
+        'lag2': stock_series.shift(2),
+        'lag3': stock_series.shift(3),
+        'moving_avg_3': stock_series.rolling(window=3).mean().shift(1),
+        'moving_avg_5': stock_series.rolling(window=5).mean().shift(1),
+        'moving_avg_10': stock_series.rolling(window=10).mean().shift(1),
+        'std_5': stock_series.rolling(window=5).std().shift(1),
+        'std_10': stock_series.rolling(window=10).std().shift(1),
+        'max_5': stock_series.rolling(window=5).max().shift(1),
+        'min_5': stock_series.rolling(window=5).min().shift(1)})
 
     gb_data = gb_data.dropna()
 
@@ -537,7 +533,7 @@ for stock in real_volatility.columns:
         gb_model.fit(train_X, train_y)
         validation_Prediction = np.exp(gb_model.predict(validation_X))
         validation_Actual = np.exp(validation_y)
-        validation_RMSE, validation_QLIKE, validation_RMPSE, validation_MAPE = metric(validation_Actual, validation_Prediction)
+        validation_QLIKE, validation_MAPE, validation_MSE, validation_DA = metric(validation_Prediction, validation_Actual)
 
         if validation_MAPE < final_MAPE:
             final_MAPE = validation_MAPE
@@ -558,8 +554,8 @@ for stock in real_volatility.columns:
 ``` {python}
 # List to store value
 linear_panel = pd.DataFrame()
-QLIKE_list = []
 RMSE_list = []
+QLIKE_list = []
 RMPSE_list = []
 MAPE_list = []
 # Dictionary to store best moving average for each stock
@@ -571,7 +567,6 @@ moving_average = [3, 5, 7, 10]
 # go through each stock
 for stock in real_volatility.columns:  
     stock_series = real_volatility[stock]
-    log_stock = np.log(stock_series)
 
     # initialise for the best performance tracker
     final_MAPE = float('inf')
@@ -584,11 +579,11 @@ for stock in real_volatility.columns:
 
         # feature sets
         linear_data = pd.DataFrame({
-            'volatility': log_stock,
-            'trend': np.arange(len(log_stock)),
-            'lag1': log_stock.shift(1),
-            'lag2': log_stock.shift(2),
-            'moving_avg': log_stock.rolling(window=moving).mean().shift(1)})
+            'volatility': stock_series,
+            'trend': np.arange(len(stock_series)),
+            'lag1': stock_series.shift(1),
+            'lag2': stock_series.shift(2),
+            'moving_avg': stock_series.rolling(window=moving).mean().shift(1)})
         linear_data = linear_data.dropna()
 
         # Train-Validation-Test split
@@ -601,13 +596,12 @@ for stock in real_volatility.columns:
         linear_test = linear_data.iloc[train_size + validation_size:]
 
         # Prepare the dataset 
-        feature_cols = ['trend', 'lag1', 'lag2', 'moving_avg']
-        train_X = linear_train[feature_cols]
+        feature_columns = ['trend', 'lag1', 'lag2', 'moving_avg']
+        train_X = linear_train[feature_columns]
         train_y = linear_train['volatility']
-        validation_X = linear_validation[feature_cols]
+        validation_X = linear_validation[feature_columns]
         validation_y = linear_validation['volatility']
-        test_X = linear_test[feature_cols]
-        test_y = linear_test['volatility'] 
+
 
         # fit on train set
         linear_model = LinearRegression()
@@ -616,18 +610,22 @@ for stock in real_volatility.columns:
         # evaluate on the validation set
         validation_Prediction = np.exp(linear_model.predict(validation_X))
         validation_Actual = np.exp(validation_y)
-        validation_RMSE, validation_QLIKE, validation_RMPSE, validation_MAPE = metric(validation_Actual, validation_Prediction)
+        validation_RMSE, validation_QLIKE, validation_RMPSE, validation_MAPE = metric(validation_Prediction, validation_Actual)
 
         # check is this the best
         if validation_MAPE < final_MAPE:
             final_MAPE = validation_MAPE
+            test_data = linear_test.dropna(subset=feature_columns + ['volatility'])
+            test_X = test_data[feature_columns]
+            test_y = test_data['volatility'] 
             final_Prediction = np.exp(linear_model.predict(test_X))
             final_Actual = np.exp(test_y)
             best_ma = moving  # Store the best moving average
+            
 
     # store the value for each stock
     if final_Prediction is not None:
-        linear_panel[stock] = pd.Series(final_Prediction, index=linear_test.index)
+        linear_panel[stock] = pd.Series(final_Prediction, index=test_X.index)
 ```
 - Evaluated the performance of linear relationship between features and targets
 - Evaluated whether there are trends in the data
@@ -703,8 +701,7 @@ For each individual stock, it would split the dataset into 80% training, 10% val
 #| tbl-cap: "Performance metrics across all stocks for each model."
 #| tbl-align: center
 #| 
-# Define model names
-model_names = ['HAR_RV', 'LAG', 'Linear', 'PCA_Linear', 'Random_Forest', 'Gradient_Boosting', 'GAT']
+model_names = ['HAR_RV', 'LAG', 'Linear', 'PCA_Linear', 'Random_Forest', 'Gradient_Boosting']
 
 desktop_path = Path('.')
 
@@ -714,15 +711,13 @@ def calculate_performance_metrics():
     metrics = []
 
     for model in model_names:
-        if model == 'GAT':
-            y_pred = pd.read_csv('GAT_prediction_panel.csv', index_col=0)
-        else:
-            y_pred = pd.read_csv(f'{model}_predictions.csv', index_col=0)
+
+        y_pred = pd.read_csv(f'{model}_predictions.csv', index_col=0)
             
-        actual = pd.read_csv('real_volatility.csv', index_col=0)
+        actual = pd.read_csv('real_volatility.csv')
         y_true = actual.reindex(index=y_pred.index) 
 
-        Y, Ŷ = y_true.values, y_pred.values
+        Y, Ŷ = np.exp(y_true.values), y_pred.values
         eps = 1e-12
 
         rmspe = np.sqrt(np.mean(((Ŷ - Y) / (Y + eps))**2, axis=0))
@@ -748,10 +743,7 @@ def calculate_performance_metrics():
         "QLIKE": 6,
         "MAPE": 2
     })
-
-    return summary_df1
-
-
+    
 # Run the code
 calculate_performance_metrics()
 ```
@@ -773,7 +765,6 @@ The results show GAT's effectiveness in capturing complex volatility patterns, w
 #| fig-cap: "Predicted vs Actual Volatility for Different Models"
 #| fig-align: center
 
-
 model_names = ['HAR_RV', 'LAG', 'Linear', 'PCA_Linear', 'Random_Forest', 'Gradient_Boosting', 'GAT']
 desktop_path = Path('.')
 
@@ -792,7 +783,7 @@ def load_and_align_data():
         model_preds[model] = preds
         
         if shared_stocks is None:
-            actual = pd.read_csv('real_volatility.csv', index_col=0)
+            actual = pd.read_csv('real_volatility.csv')
             shared_stocks = list(set(preds.columns).intersection(set(actual.columns)))
             shared_dates = preds.index.tolist()
         else:
@@ -800,8 +791,9 @@ def load_and_align_data():
             shared_dates = list(set(shared_dates).intersection(set(preds.index.tolist())))
 
     aligned_actual = actual.reindex(index=shared_dates)
+    aligned_actual1 = np.exp(aligned_actual)
     
-    return model_preds, aligned_actual, shared_stocks, shared_dates
+    return model_preds, aligned_actual1, shared_stocks, shared_dates
 
 def create_comparison_plots():
     model_preds, actual, shared_stocks, shared_dates = load_and_align_data()
@@ -825,8 +817,6 @@ def create_comparison_plots():
         model_data = model_preds[model].loc[shared_dates, shared_stocks]
         avg_pred = model_data.mean(axis=1).values
         
-        # Calculate RMSE
-        rmse = np.sqrt(np.mean((avg_pred - avg_actual)**2))
         
         # Store errors for boxplot
         errors = np.abs(avg_pred - avg_actual)
@@ -838,7 +828,7 @@ def create_comparison_plots():
         axes[idx].plot(x_indices, avg_pred, '-', color=colors[idx % len(colors)], 
                       linewidth=1.2, label=model, alpha=0.8)
         
-        axes[idx].set_title(f'{model} (RMSE: {rmse:.6f})', fontsize=10)
+        
         axes[idx].set_xlabel('Time Index')
         axes[idx].set_ylabel('Avg Volatility')
         axes[idx].legend(loc='upper right')
@@ -852,13 +842,13 @@ def create_comparison_plots():
         for i, box in enumerate(boxplot['boxes']):
             box.set(facecolor=colors[i % len(colors)], alpha=0.6)
         
-        axes[-1].set_title('Error Distribution', fontsize=10)
+        axes[-1].set_title('Error Distribution')
         axes[-1].set_ylabel('Absolute Error')
         axes[-1].set_xticklabels(model_errors.keys(), rotation=45, ha='right')
         axes[-1].grid(True, linestyle='--', alpha=0.6)
     
     plt.suptitle('Model Predictions vs Actual Values', fontsize=14, y=0.98, fontweight='bold')
-    plt.tight_layout(rect=[0, 0, 1, 0.92])
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.show()
 
 # Run the code
