@@ -390,7 +390,7 @@ for stock in real_volatility.columns:
 - help the model to focus on the most informative component of the data
 - **Hyperparameters Tuning:** Variance threshold [0.9, 0.93, 0.95, 0.97, 0.99]
 - **Features:** Time trends, lag terms (lag1-3), moving averages (3, 5, 10 ), standard deviations (5, 10)
-- **Result (Most Common):** 0.97 threshold
+- **Result (Most Common):** 0.99 threshold
 
 
 ### Random Forest
