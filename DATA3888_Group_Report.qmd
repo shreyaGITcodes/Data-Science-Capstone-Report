@@ -478,9 +478,9 @@ for stock in real_volatility.columns:
 #| eval: false
 #| echo: false
 gb_panel = pd.DataFrame()
+RMSE_list = []
 QLIKE_list = []
-MSE_list = []
-DA_list
+RMPSE_list = []
 MAPE_list = []
 # Dictionary to store best learning rate for each stock
 best_lr_dict = {}
@@ -533,7 +533,7 @@ for stock in real_volatility.columns:
         gb_model.fit(train_X, train_y)
         validation_Prediction = np.exp(gb_model.predict(validation_X))
         validation_Actual = np.exp(validation_y)
-        validation_QLIKE, validation_MAPE, validation_MSE, validation_DA = metric(validation_Prediction, validation_Actual)
+        validation_RMSE, validation_QLIKE, validation_RMPSE, validation_MAPE = metric(validation_Prediction, validation_Actual)
 
         if validation_MAPE < final_MAPE:
             final_MAPE = validation_MAPE
