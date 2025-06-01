@@ -65,8 +65,20 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 ## 3. Data
 
 ``` {python}
-import pandas as pd
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import GradientBoostingRegressor
+from itertools import product
+import warnings
+from pandas.errors import PerformanceWarning
+=
+# Suppress fragmentation warnings from pandas
+warnings.filterwarnings("ignore", category=PerformanceWarning)
 real_volatility = pd.read_csv('real_volatility.csv', index_col=0)
 ```
 
@@ -192,10 +204,10 @@ for stock in real_volatility.columns:
 - Predicts volatility using lagged realized volatility over different time periods  
 - Captures long memory in volatility patterns  
 - **Hyperparameters Tuning:** 
-  - **Daily:** 1, 
-  - **Weekly:** average of 5 and 7, 
-  - **Monthly:** the average of 22 and 30
-- **Result ( Most Common):** **Daily**= 1, **Weekly**= 5, **Monthly**= 30
+  - **Short:** 1, 
+  - **Midium:** average of 5 and 7, 
+  - **Long:** the average of 22 and 30
+- **Result ( Most Common):** **Short**= 1, **Midium**= 5, **Long**= 30
 
 
 ### Lag-Model
@@ -283,7 +295,7 @@ for stock in real_volatility.columns:
 - Served as a benchmark and captured short-term correlation
 - **Hyperparameters Tuning:** Lag periods [1, 2, 3, 4, 5]
 - **Features:** Lagged volatility values, time trend
-- **Result (Most Common):** lag = 1 and 2
+- **Result (Most Common):** lag = 1 (100%)
 
 ### PCA Model 
 ``` {python}
@@ -380,7 +392,7 @@ for stock in real_volatility.columns:
 - simplified the data by reducing noise and dimensionality then applied linear regression 
 - help the model to focus on the most informative component of the data
 - **Hyperparameters Tuning:** Variance threshold [0.9, 0.93, 0.95, 0.97, 0.99]
-- **Features:** Time trends, lag terms (lag1-3), moving averages (3, 5, 10 days), standard deviations (5, 10 days)
+- **Features:** Time trends, lag terms (lag1-3), moving averages (3, 5, 10 ), standard deviations (5, 10)
 - **Result (Most Common):** 0.97 threshold
 
 
