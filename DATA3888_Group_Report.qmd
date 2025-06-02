@@ -638,6 +638,9 @@ for stock in real_volatility.columns:
 
 # FOR NOW RANDOM FOREST AND GRADIENT BOOSTING HAVE BEEN TAKEN OUT, MUST INCLUDE IT
 ```{python}
+#| eval: false
+#| echo: false
+
 import os
 from pathlib import Path
 
@@ -743,6 +746,8 @@ def calculate_performance_metrics():
         "QLIKE": 6,
         "MAPE": 2
     })
+
+    return summary_df1
     
 # Run the code
 calculate_performance_metrics()
