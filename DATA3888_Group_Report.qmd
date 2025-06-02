@@ -917,22 +917,6 @@ def visualize_stock_correlation():
 visualize_stock_correlation()
 ```
 
-Linear models such as HAR-RV and Linear Regression are the most interpretable across all baseline models. These models rely on the assumption of simple linear relationship and clear coefficients that represent a direct relationship between input and output. This is extremely useful for understanding how lagged volatility can directly influence the prediction.
-
-The PCA model transforms to reduce dimensionality and noise but this transformation reduces the interpretability. The components do not have direct corresponding with the original feature, making it harder to explain.
-
-Tree-based models like Random Forest and Gradient Boosting offer powerful predictive ability as it could capture non-linear relationship and complex interaction. However, this leads to difficulty to interpret.
-
-Overall, HAR-RV offers the best balance between accuracy and interpretability. It offers a simple linear relationship while multiple time periods allow the model to adapt well across different regimes. 
-
-The Graph Attention Network (GAT) distinguishes itself from traditional baseline models by inherently integrating interpretability into its design. Each edge within the GAT framework possesses an attention coefficient, denoted as \( \alpha_{ij} \), which quantifies the degree of influence that stock \( j \) has on the forecast of stock \( i \). By averaging these coefficients across the test set, we can construct the influence matrix, as depicted in @fig-correlation. 
-
-The correlation between the bright blocks within this matrix and the empirical volatility-correlation blocks shown in the left-hand heatmap suggests that the network has effectively learned to prioritize information from economically related peers—those stocks that share the same sector or common risk factors—while diminishing the impact of weakly connected stocks. 
-
-This characteristic serves to make the GAT, despite being a non-linear deep learning model, a bastion of transparency. The prediction process is driven primarily by a localized neighbourhood of highly correlated stocks, allowing us to directly interpret the contributions through \( \alpha_{ij} \). Consequently, we can articulate a cohesive narrative: "Tech stocks predominantly respond to movements in other tech stocks, while financial stocks are more attuned to their financial counterparts." This capability underscores the GAT's strength in capturing intricate cross-stock interactions that simpler linear models or tree-based approaches tend to overlook.
-
-
-
 
 ## 6. Project Deployment & Interdisciplinary Impact
 
