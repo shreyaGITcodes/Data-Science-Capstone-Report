@@ -99,8 +99,8 @@ To view the main report:
 2. Open `docs/Report_group_21.html` in your web browser
 
 For the interactive Shiny application:
-- Deployed at: [Posit Cloud URL]
-- Source code: [GitHub repository URL]
+- Deployed at: [https://binhminhtran-volatility-explorer.share.connect.posit.cloud/]
+- Source code: [https://github.com/idolbinhminhtran/Volatility-Explorer]
 
 ## 🙏 Acknowledgments
 
