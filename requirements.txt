@@ -1,0 +1,13 @@
+pandas
+numpy
+pyyaml
+jupyter
+matplotlib
+seaborn 
+scipy
+scikit-learn
+torch
+torch_geometric
+yfinance
+lxml
+statsmodels
