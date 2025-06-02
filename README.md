@@ -85,17 +85,23 @@ Our project explores the challenge of predicting realized volatility in financia
 ## 👥 Team Members
 
 Group 21:
-- [Add team member names here]
+- Shreya Prakash (520496062)
+- Chenuka Garunsinghe (530080640)
+- Binh Minh Tran (530414672)
+- Enoch Wong (530531430)
+- Ruohai Tao (540222281)
+- Zoha Kausar (530526838)
 
 ## 📝 Viewing the Report
 
 To view the main report:
 1. Clone this repository
-2. Open `docs/DATA3888_Group_Report.html` in your web browser
+2. Open `docs/Report_group_21.html` in your web browser
 
 For the interactive Shiny application:
-- Deployed at: [Posit Cloud URL]
-- Source code: [GitHub repository URL]
+- Deployed at: [https://binhminhtran-volatility-explorer.share.connect.posit.cloud/]
+- Source code: [https://github.com/idolbinhminhtran/Volatility-Explorer]
+
 
 ## 🙏 Acknowledgments
 
