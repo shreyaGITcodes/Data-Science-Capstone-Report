@@ -7,7 +7,7 @@
 This repository contains the comprehensive report and supporting materials for our DATA3888 Data Science Capstone project. We investigate and compare various machine learning approaches for predicting stock market volatility using high-frequency trading data provided by Optiver.
 
 ### 📑 Main Report
-The complete project report is available at: [`docs/DATA3888_Group_Report.html`](docs/DATA3888_Group_Report.html)
+The complete project report is available at: [`docs/Report_group_21.html`](docs/Report_group_21.html)
 
 ## 🎯 Project Summary
 
@@ -27,8 +27,8 @@ Our project explores the challenge of predicting realized volatility in financia
 
 ```
 ├── docs/                           # Report and documentation
-│   ├── DATA3888_Group_Report.html  # Main project report (view this!)
-│   ├── DATA3888_Group_Report.qmd   # Quarto source file
+│   ├── Report_group_21.html  # Main project report (view this!)
+│   ├── Report_group_21.qmd   # Quarto source file
 │   └── DATA3888_Group_Report_files/# Report assets
 │
 ├── figures/                        # Figures and visualizations used in report
